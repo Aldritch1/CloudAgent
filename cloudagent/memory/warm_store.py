@@ -2,6 +2,8 @@ import logging
 
 import asyncpg
 
+from cloudagent.tenant_context import get_tenant_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +21,9 @@ class WarmStore:
             conn = await self._connect()
             try:
                 row = await conn.fetchrow(
-                    "SELECT * FROM user_profiles WHERE user_id = $1", user_id
+                    "SELECT * FROM user_profiles WHERE tenant_id = $1 AND user_id = $2",
+                    get_tenant_id(),
+                    user_id,
                 )
                 return dict(row) if row else None
             finally:
@@ -34,11 +38,12 @@ class WarmStore:
             try:
                 await conn.execute(
                     """
-                    INSERT INTO user_profiles (user_id, preferences, updated_at)
-                    VALUES ($1, $2, NOW())
-                    ON CONFLICT (user_id) DO UPDATE
-                    SET preferences = $2, updated_at = NOW()
+                    INSERT INTO user_profiles (tenant_id, user_id, preferences, updated_at)
+                    VALUES ($1, $2, $3, NOW())
+                    ON CONFLICT (tenant_id, user_id) DO UPDATE
+                    SET preferences = $3, updated_at = NOW()
                     """,
+                    get_tenant_id(),
                     user_id,
                     profile,
                 )
@@ -52,7 +57,8 @@ class WarmStore:
             conn = await self._connect()
             try:
                 rows = await conn.fetch(
-                    "SELECT * FROM session_summaries WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+                    "SELECT * FROM session_summaries WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT $3",
+                    get_tenant_id(),
                     user_id,
                     limit,
                 )
@@ -69,11 +75,12 @@ class WarmStore:
             try:
                 await conn.execute(
                     """
-                    INSERT INTO session_summaries (session_id, user_id, summary, created_at)
-                    VALUES ($1, $2, $3, NOW())
-                    ON CONFLICT (session_id) DO UPDATE
-                    SET summary = $3, created_at = NOW()
+                    INSERT INTO session_summaries (tenant_id, session_id, user_id, summary, created_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (tenant_id, session_id) DO UPDATE
+                    SET summary = $4, created_at = NOW()
                     """,
+                    get_tenant_id(),
                     session_id,
                     user_id,
                     summary,

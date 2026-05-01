@@ -2,7 +2,7 @@
 
 CloudAgent is an intelligent customer service system built with FastAPI + LangGraph + LangChain. It uses a multi-Agent architecture with hybrid RAG (Milvus + Neo4j + PostgreSQL) and a tiered memory system (Redis hot / PostgreSQL warm / Milvus cold).
 
-**Current Phase:** Phase 3 complete — Memory + Security + Optimization (JWT auth, tiered memory, L1/L2 cache, clarification logic, HITL via LangGraph interrupt).
+**Current Phase:** Phase 4 complete — Production Hardening (rate limiting, circuit breaker, Prometheus metrics, multi-tenancy).
 
 ---
 
@@ -48,6 +48,10 @@ Four-layer architecture (from design doc):
 | Structured DB | PostgreSQL | Business data + BM25 keyword search (`pg_trgm`, `tsvector`) |
 | Auth | python-jose | JWT Bearer token parsing, `jwt_disabled` dev switch |
 | Cache | Redis + Milvus | L1 exact match (Redis, TTL 300s) + L2 semantic (Milvus) |
+| Rate Limiting | Custom Redis sliding window | Per-user `ratelimit:<user_id>` sorted set, 60 RPM default |
+| Circuit Breaker | pybreaker | LLM call layer (ChatAgent / RAGAgent), fail_max=5, reset_timeout=60s |
+| Metrics | prometheus-client | HTTP middleware + LLM/cache/retrieval counters, `/metrics` endpoint |
+| Multi-Tenancy | contextvars | Application-level isolation: Redis key prefix, PG/Milvus `tenant_id` filters |
 
 ---
 
@@ -60,9 +64,14 @@ cloudagent/
 ├── models.py                # ChatRequest, ChatResponse
 ├── state.py                 # AgentState TypedDict for LangGraph
 ├── graph.py                 # StateGraph builder with nodes + interrupt
-├── auth.py                  # JWT dependency: get_current_user
+├── auth.py                  # JWT dependency: get_current_user + tenant context
 ├── cache.py                 # QueryCache: L1/L2 query caching
 ├── hitl.py                  # HITLManager: sensitive operation confirmation
+├── rate_limit.py            # RateLimiter: Redis sliding window per user
+├── circuit_breaker.py       # LLMCircuitBreaker + CircuitBreakerChatOpenAI proxy
+├── metrics.py               # Prometheus counters, histograms, MetricsMiddleware
+├── tenant_context.py        # ContextVar for tenant_id isolation
+├── tenant.py                # TenantDependency: X-Tenant-ID header / JWT claim
 ├── agent/
 │   ├── __init__.py
 │   ├── router.py            # EntryAgent: intent recognition + routing + clarify
@@ -70,9 +79,9 @@ cloudagent/
 │   └── rag_agent.py         # RAGAgent: retrieval + context-augmented generation
 ├── memory/
 │   ├── __init__.py
-│   ├── redis_store.py       # SessionStore: hot store (get_session / save_session)
-│   ├── warm_store.py        # WarmStore: PostgreSQL profiles + summaries
-│   ├── cold_store.py        # ColdStore: Milvus semantic memory embeddings
+│   ├── redis_store.py       # SessionStore: hot store (tenant-prefixed keys)
+│   ├── warm_store.py        # WarmStore: PostgreSQL profiles + summaries (tenant-aware SQL)
+│   ├── cold_store.py        # ColdStore: Milvus semantic memory (tenant-aware filters)
 │   └── manager.py           # TieredMemoryManager: aggregates hot/warm/cold
 └── retrieval/
     ├── __init__.py
@@ -84,7 +93,7 @@ cloudagent/
 
 tests/
 ├── conftest.py              # Autouse fixture: patches env vars before import
-├── test_main.py             # API endpoint tests (health, /chat, routing, auth)
+├── test_main.py             # API endpoint tests (health, /chat, routing, auth, 429, 503)
 ├── test_router.py           # EntryAgent routing logic (chat/faq/workflow/clarify)
 ├── test_chat_agent.py       # ChatAgent system prompt + message conversion
 ├── test_rag_agent.py        # RAGAgent prompt construction + LLM invoke
@@ -96,6 +105,10 @@ tests/
 ├── test_warm_store.py       # PostgreSQL warm store tests
 ├── test_cold_store.py       # Milvus cold store tests
 ├── test_redis_store.py      # Redis storage + TTL + fallback
+├── test_rate_limit.py       # Sliding window rate limiter tests
+├── test_circuit_breaker.py  # pybreaker sync + async circuit breaker tests
+├── test_metrics.py          # Prometheus counters + middleware tests
+├── test_tenant.py           # Multi-tenancy contextvars + isolation tests
 ├── test_models.py           # Pydantic model validation
 ├── test_config.py           # Settings env loading
 └── retrieval/
@@ -197,7 +210,7 @@ Key testing patterns:
 | **1** ✅ | Core API skeleton | FastAPI, Entry Agent, Chat Agent, Redis sessions |
 | **2** ✅ | Multi-Agent + Hybrid RAG | RAG Agent, Milvus + Neo4j + PG retrieval, RRF fusion |
 | **3** ✅ | Memory + Security + Optimization | JWT auth, tiered memory (Redis/PG/Milvus), L1/L2 cache, HITL |
-| **4** | Production hardening | Rate limiting, circuit breaker, Prometheus/Grafana, multi-tenant |
+| **4** ✅ | Production hardening | Rate limiting, circuit breaker, Prometheus/Grafana, multi-tenant |
 | **5** | MCP tool ecosystem | MCP servers for order/SMS/ticket services |
 | **6** | Frontend + SSE | Vue3 UI, SSE streaming, visualization |
 
@@ -223,6 +236,13 @@ DATABASE_URL=postgresql://cloudagent:cloudagent@localhost:5432/cloudagent
 JWT_SECRET=your-jwt-secret-key-at-least-32-characters-long
 JWT_ALGORITHM=HS256
 JWT_DISABLED=false  # set true in dev/tests to bypass auth
+
+# Phase 4: Production Hardening
+RATE_LIMIT_REQUESTS_PER_MINUTE=60
+CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
+ENABLE_METRICS=true
+DEFAULT_TENANT_ID=default
 ```
 
 ---

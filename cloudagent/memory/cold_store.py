@@ -3,6 +3,8 @@ import logging
 from langchain_openai import OpenAIEmbeddings
 from pymilvus import DataType, FieldSchema, MilvusClient
 
+from cloudagent.tenant_context import get_tenant_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +37,7 @@ class ColdStore:
             enable_dynamic_field=True,
         )
         schema.add_field("id", DataType.INT64, is_primary=True)
+        schema.add_field("tenant_id", DataType.VARCHAR, max_length=64)
         schema.add_field("user_id", DataType.VARCHAR, max_length=64)
         schema.add_field("session_id", DataType.VARCHAR, max_length=64)
         schema.add_field("content", DataType.VARCHAR, max_length=4096)
@@ -62,6 +65,7 @@ class ColdStore:
             self._client.insert(
                 collection_name=self.COLLECTION_NAME,
                 data=[{
+                    "tenant_id": get_tenant_id(),
                     "user_id": user_id,
                     "session_id": session_id,
                     "content": content,
@@ -79,7 +83,7 @@ class ColdStore:
             results = self._client.search(
                 collection_name=self.COLLECTION_NAME,
                 data=[vector],
-                filter=f"user_id == '{user_id}'",
+                filter=f"tenant_id == '{get_tenant_id()}' && user_id == '{user_id}'",
                 limit=top_k,
                 output_fields=["content"],
             )

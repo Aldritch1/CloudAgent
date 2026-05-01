@@ -12,6 +12,9 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 - **L1/L2 缓存**：Redis 精确匹配缓存（<50ms）+ Milvus 语义缓存，减少重复 LLM 调用
 - **JWT 认证**：API Gateway 层解析 Bearer Token，支持开发环境一键关闭
 - **HITL 人机协同**：敏感操作通过 LangGraph `interrupt` 暂停，等待用户确认后继续执行
+- **限流熔断**：Redis 滑动窗口限流（60 RPM）+ LLM 层熔断器（5 次失败/60s 恢复），保障服务稳定性
+- **可观测性**：Prometheus HTTP 请求延迟、LLM 调用、缓存命中率等指标，原生 `/metrics` 端点
+- **多租户隔离**：基于 `contextvars` 的租户上下文，`X-Tenant-ID` 或 JWT `tenant_id` 声明，Redis/PG/Milvus 全链路隔离
 - **优雅降级**：任何检索服务、LLM 或认证故障时，系统自动降级，保证服务可用性
 
 ---
@@ -54,6 +57,10 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 | 会话存储 | Redis | TTL 3600s，连接失败降级内存存储 |
 | 认证 | python-jose | JWT Bearer Token 解析，开发环境可禁用 |
 | 缓存 | Redis + Milvus | L1 精确匹配（Redis TTL 300s）+ L2 语义相似（Milvus） |
+| 限流 | 自定义 Redis 滑动窗口 | 每用户 `ratelimit:<user_id>`，默认 60 RPM |
+| 熔断 | pybreaker | LLM 调用层熔断，5 次失败开启，60s 半开恢复 |
+| 可观测性 | prometheus-client | HTTP 延迟直方图、LLM/缓存/检索计数器，`/metrics` 端点 |
+| 多租户 | contextvars | 应用层隔离：Redis key 前缀、PG/Milvus `tenant_id` 过滤 |
 | 配置管理 | pydantic-settings | `.env` 文件支持，`SecretStr` 保护密钥 |
 | 测试 | pytest | `pytest-asyncio` + `fakeredis` + `MagicMock` |
 
@@ -111,6 +118,13 @@ DATABASE_URL=postgresql://cloudagent:cloudagent@localhost:5432/cloudagent
 JWT_SECRET=your-jwt-secret-key-at-least-32-characters-long
 JWT_ALGORITHM=HS256
 JWT_DISABLED=false
+
+# Phase 4: 生产加固
+RATE_LIMIT_REQUESTS_PER_MINUTE=60
+CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
+ENABLE_METRICS=true
+DEFAULT_TENANT_ID=default
 ```
 
 ### 5. 运行服务
@@ -173,16 +187,20 @@ pytest tests/ -v
 ```
 
 当前测试覆盖：
-- API 端点（健康检查、对话、异常处理、意图路由、JWT 认证）
+- API 端点（健康检查、对话、异常处理、意图路由、JWT 认证、429 限流、503 熔断）
 - EntryAgent 意图识别（chat / faq / workflow / clarify）
 - ChatAgent 系统提示词与消息转换
 - RAGAgent 检索上下文注入与 LLM 调用
 - LangGraph StateGraph 流程（chat / faq / clarify / HITL interrupt）
 - JWT 认证（有效/过期/缺失/禁用）
-- Redis 会话存储、TTL、连接降级
-- 分层记忆：TieredMemoryManager、WarmStore、ColdStore
+- Redis 会话存储、TTL、连接降级、多租户 key 前缀隔离
+- 分层记忆：TieredMemoryManager、WarmStore、ColdStore（含租户隔离）
 - L1/L2 查询缓存
 - HITL 状态机
+- 限流：滑动窗口、独立用户配额、Redis 降级
+- 熔断：闭合/开启/半开状态、同步/异步调用
+- Prometheus 指标：HTTP 中间件、LLM 调用、缓存命中
+- 多租户：Header/JWT 声明提取、Redis/PG/Milvus 隔离
 - 检索层：VectorRetriever、GraphRetriever、KeywordRetriever、HybridRetriever（RRF 融合）
 
 ---
@@ -196,17 +214,22 @@ cloudagent/
 ├── models.py                # ChatRequest, ChatResponse
 ├── state.py                 # AgentState TypedDict
 ├── graph.py                 # StateGraph 构建器（含 interrupt）
-├── auth.py                  # JWT 认证依赖
+├── auth.py                  # JWT 认证依赖 + 租户上下文
 ├── cache.py                 # L1/L2 查询缓存
 ├── hitl.py                  # HITL 敏感操作确认
+├── rate_limit.py            # 滑动窗口限流器
+├── circuit_breaker.py       # LLM 层熔断器
+├── metrics.py               # Prometheus 指标与中间件
+├── tenant_context.py        # 租户上下文 ContextVar
+├── tenant.py                # TenantDependency 依赖注入
 ├── agent/
 │   ├── router.py            # EntryAgent: 意图识别 + 路由 + 澄清
 │   ├── chat_agent.py        # ChatAgent: 系统提示词 + LLM 调用
 │   └── rag_agent.py         # RAGAgent: 检索增强生成
 ├── memory/
-│   ├── redis_store.py       # SessionStore: 热存储
-│   ├── warm_store.py        # WarmStore: PostgreSQL 用户画像
-│   ├── cold_store.py        # ColdStore: Milvus 语义记忆
+│   ├── redis_store.py       # SessionStore: 热存储（租户前缀隔离）
+│   ├── warm_store.py        # WarmStore: PostgreSQL 用户画像（租户隔离）
+│   ├── cold_store.py        # ColdStore: Milvus 语义记忆（租户隔离）
 │   └── manager.py           # TieredMemoryManager: 分层聚合
 └── retrieval/
     ├── base.py              # RetrievalResult / Retriever Protocol
@@ -243,7 +266,7 @@ tests/
 | **1** ✅ | 核心 API 骨架 | FastAPI、EntryAgent、ChatAgent、Redis 会话 |
 | **2** ✅ | 多智能体 + 混合 RAG | RAGAgent、Milvus + Neo4j + PG 检索、RRF 融合 |
 | **3** ✅ | 记忆 + 安全 + 优化 | JWT 认证、分层记忆（Redis/PG/Milvus）、L1/L2 缓存、HITL |
-| **4** | 生产加固 | 限流、熔断、Prometheus/Grafana、多租户 |
+| **4** ✅ | 生产加固 | 限流、熔断、Prometheus/Grafana、多租户 |
 | **5** | MCP 工具生态 | 订单 / 短信 / 工单等 MCP 服务 |
 | **6** | 前端 + SSE | Vue3 UI、SSE 流式输出、可视化 |
 

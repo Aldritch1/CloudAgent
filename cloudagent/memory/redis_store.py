@@ -3,6 +3,8 @@ import logging
 
 import redis
 
+from cloudagent.tenant_context import get_tenant_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,12 +24,18 @@ class SessionStore:
                 self._use_fallback = True
                 self._redis = None
 
+    def _key(self, session_id: str) -> str:
+        tenant = get_tenant_id()
+        if tenant:
+            return f"{tenant}:session:{session_id}"
+        return f"session:{session_id}"
+
     def get_session(self, session_id: str) -> list[dict]:
         if self._use_fallback:
             return self._fallback.get(session_id, [])
 
         try:
-            raw = self._redis.get(f"session:{session_id}")
+            raw = self._redis.get(self._key(session_id))
             if raw is None:
                 return []
             return json.loads(raw)
@@ -43,7 +51,7 @@ class SessionStore:
 
         try:
             self._redis.setex(
-                f"session:{session_id}",
+                self._key(session_id),
                 3600,
                 json.dumps(messages, ensure_ascii=False),
             )

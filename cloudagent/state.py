@@ -5,6 +5,7 @@ class AgentState(TypedDict, total=False):
     messages: list[dict]
     user_id: str
     session_id: str
+    tenant_id: str | None
     intent: str | None
     confidence: float
     target_agent: str | None

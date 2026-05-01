@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from cloudagent.auth import get_current_user
 from cloudagent.cache import QueryCache
+from cloudagent.tenant import tenant_dependency
 from cloudagent.circuit_breaker import LLMCircuitBreaker
 from cloudagent.config import settings
 from cloudagent.graph import build_graph
@@ -98,7 +99,11 @@ async def health():
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, user_id: str = Depends(get_current_user)):
+async def chat(
+    request: ChatRequest,
+    user_id: str = Depends(get_current_user),
+    tenant_id: str = Depends(tenant_dependency),
+):
     try:
         # Rate limiting
         if not rate_limiter.check(user_id):
@@ -124,6 +129,7 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user)):
             "confidence": 0.0,
             "target_agent": None,
             "context": {},
+            "tenant_id": tenant_id,
             "last_message": request.message,
         }
 

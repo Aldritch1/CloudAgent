@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
 from cloudagent.config import settings
+from cloudagent.tenant_context import set_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
         user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="无效的认证令牌")
+        tenant_id = payload.get("tenant_id")
+        if tenant_id:
+            set_tenant_id(tenant_id)
         return user_id
     except (JWTError, Exception):
         raise HTTPException(status_code=401, detail="认证令牌无效或已过期")
