@@ -2,7 +2,7 @@
 
 CloudAgent is an intelligent customer service system built with FastAPI + LangGraph + LangChain. It uses a multi-Agent architecture with hybrid RAG (Milvus + Neo4j + PostgreSQL) and a tiered memory system (Redis hot / PostgreSQL warm / Milvus cold).
 
-**Current Phase:** Phase 1 complete — Core API skeleton (FastAPI + Entry Agent + Chat Agent + Redis session storage).
+**Current Phase:** Phase 2 complete — Multi-Agent + Hybrid RAG (Entry Agent, RAG Agent, Chat Agent, Milvus + Neo4j + PostgreSQL retrieval with RRF fusion).
 
 ---
 
@@ -42,6 +42,9 @@ Four-layer architecture (from design doc):
 | Session Store | Redis | TTL 3600s, in-memory fallback on connection failure |
 | Testing | pytest | `monkeypatch` for env isolation, `fakeredis` for Redis tests |
 | Config | pydantic-settings | `.env` file support, `SecretStr` for API keys |
+| Vector DB | Milvus | Semantic search with OpenAI embeddings (dim=1536, COSINE) |
+| Graph DB | Neo4j | Knowledge graph for FAQ relationship queries |
+| Structured DB | PostgreSQL | Business data + BM25 keyword search (`pg_trgm`, `tsvector`) |
 
 ---
 
@@ -55,19 +58,34 @@ cloudagent/
 ├── agent/
 │   ├── __init__.py
 │   ├── router.py            # EntryAgent: intent recognition + routing
-│   └── chat_agent.py        # ChatAgent: system prompt + LLM invoke
-└── memory/
+│   ├── chat_agent.py        # ChatAgent: system prompt + LLM invoke
+│   └── rag_agent.py         # RAGAgent: retrieval + context-augmented generation
+├── memory/
+│   ├── __init__.py
+│   └── redis_store.py       # SessionStore: get_session / save_session
+└── retrieval/
     ├── __init__.py
-    └── redis_store.py       # SessionStore: get_session / save_session
+    ├── base.py              # RetrievalResult dataclass, Retriever Protocol
+    ├── vector.py            # VectorRetriever: Milvus semantic search
+    ├── graph.py             # GraphRetriever: Neo4j FAQ search
+    ├── keyword.py           # KeywordRetriever: PostgreSQL BM25/tsvector
+    └── hybrid.py            # HybridRetriever: RRF fusion of all three
 
 tests/
 ├── conftest.py              # Autouse fixture: patches env vars before import
-├── test_main.py             # API endpoint tests (health, /chat)
-├── test_router.py           # EntryAgent routing logic
+├── test_main.py             # API endpoint tests (health, /chat, routing)
+├── test_router.py           # EntryAgent routing logic (chat/faq/workflow)
 ├── test_chat_agent.py       # ChatAgent system prompt + message conversion
+├── test_rag_agent.py        # RAGAgent prompt construction + LLM invoke
 ├── test_redis_store.py      # Redis storage + TTL + fallback
 ├── test_models.py           # Pydantic model validation
-└── test_config.py           # Settings env loading
+├── test_config.py           # Settings env loading
+└── retrieval/
+    ├── test_base.py
+    ├── test_vector.py
+    ├── test_graph.py
+    ├── test_keyword.py
+    └── test_hybrid.py
 ```
 
 ---
@@ -82,15 +100,25 @@ Dependencies are initialized at module import time in `main.py`:
 session_store = SessionStore(str(settings.redis_url))
 entry_agent = EntryAgent(model_name=settings.model_name, api_key=...)
 chat_agent = ChatAgent(model_name=settings.model_name, api_key=...)
+vector_retriever = VectorRetriever(uri=settings.milvus_uri, api_key=...)
+graph_retriever = GraphRetriever(uri=settings.neo4j_uri, ...)
+keyword_retriever = KeywordRetriever(dsn=settings.database_url)
+hybrid_retriever = HybridRetriever(vector_retriever, graph_retriever, keyword_retriever)
+rag_agent = RAGAgent(model_name=settings.model_name, api_key=..., retriever=hybrid_retriever)
 ```
 
 This means **tests must patch the original modules before importing `main`**:
 
 ```python
+@patch("cloudagent.retrieval.vector.VectorRetriever")
+@patch("cloudagent.retrieval.graph.GraphRetriever")
+@patch("cloudagent.retrieval.keyword.KeywordRetriever")
+@patch("cloudagent.agent.rag_agent.RAGAgent")
 @patch("cloudagent.memory.redis_store.SessionStore")
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
-def test_something(mock_chat_cls, mock_entry_cls, mock_store_cls):
+def test_something(mock_chat_cls, mock_entry_cls, mock_store_cls,
+                    mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls):
     from cloudagent.main import app
     ...
 ```
@@ -105,7 +133,9 @@ If a previous test imported `main` with different mocks, use `importlib.reload(c
 
 - **LLM failures in ChatAgent**: Log error, raise `HTTPException(status_code=500, detail="服务暂时繁忙，请稍后重试")`
 - **LLM failures in EntryAgent**: Log error, set `confidence=0.0`, fallback to `chat` agent (user-transparent)
+- **LLM failures in RAGAgent**: Log error, raise `HTTPException(status_code=500, detail="服务暂时繁忙，请稍后重试")`
 - **Redis connection failures**: Degrade to in-memory `dict` storage, log warning, service continues
+- **Retrieval service failures (Milvus/Neo4j/PG)**: Return empty list, log warning, Hybrid RRF continues with remaining sources
 
 ### Intent Routing Logic
 
@@ -138,7 +168,7 @@ Key testing patterns:
 | Phase | Goal | Key Deliverables |
 |-------|------|------------------|
 | **1** ✅ | Core API skeleton | FastAPI, Entry Agent, Chat Agent, Redis sessions |
-| **2** | Multi-Agent + Hybrid RAG | RAG Agent, Milvus + Neo4j + PG retrieval, RRF fusion |
+| **2** ✅ | Multi-Agent + Hybrid RAG | RAG Agent, Milvus + Neo4j + PG retrieval, RRF fusion |
 | **3** | Memory + Security + Optimization | JWT auth, tiered memory (Redis/PG/Milvus), L1/L2 cache, HITL |
 | **4** | Production hardening | Rate limiting, circuit breaker, Prometheus/Grafana, multi-tenant |
 | **5** | MCP tool ecosystem | MCP servers for order/SMS/ticket services |
@@ -154,6 +184,13 @@ Copy `.env.example` to `.env` and fill in:
 OPENAI_API_KEY=sk-...
 REDIS_URL=redis://localhost:6379/0
 MODEL_NAME=gpt-3.5-turbo
+
+# Phase 2: Multi-Agent + Hybrid RAG
+MILVUS_URI=http://localhost:19530
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+DATABASE_URL=postgresql://cloudagent:cloudagent@localhost:5432/cloudagent
 ```
 
 ---
@@ -162,6 +199,7 @@ MODEL_NAME=gpt-3.5-turbo
 
 - Always run `pytest tests/ -v` before declaring a task complete.
 - When adding new agents, follow the existing pattern: class with `__init__(model_name, api_key)` and `run(state/messages) -> result`.
+- When adding new retrievers, implement the `Retriever` Protocol: `async def search(self, query: str, top_k: int) -> list[RetrievalResult]`.
 - When modifying `main.py`, remember module-level initialization — update tests to patch new dependencies before import.
 - Keep error messages in Chinese for user-facing responses; English is fine for logs.
 - Do not add comments explaining WHAT the code does — use clear identifiers instead. Only comment non-obvious WHYs.
