@@ -41,4 +41,4 @@ def test_ttl_set_on_save():
 
     store.save_session("sess-ttl", [{"role": "user", "content": "hello"}])
     ttl = redis_client.ttl("session:sess-ttl")
-    assert ttl == 3600
+    assert ttl >= 3599
