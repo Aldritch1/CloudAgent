@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: SecretStr = SecretStr("password")
     database_url: str = "postgresql://cloudagent:cloudagent@localhost:5432/cloudagent"
+    jwt_secret: SecretStr = SecretStr("")
+    jwt_algorithm: str = "HS256"
+    jwt_disabled: bool = False
 
 
 settings = Settings()

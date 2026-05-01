@@ -153,3 +153,30 @@ def test_entry_agent_low_confidence_fallback_to_chat(mock_llm_class):
     result = agent.run(state)
 
     assert result["target_agent"] == "chat"
+
+
+@patch("cloudagent.agent.router.ChatOpenAI")
+def test_mid_confidence_returns_clarify(mock_llm_class):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(
+        content=json.dumps({
+            "intent": "workflow",
+            "confidence": 0.65,
+            "target_agent": "workflow",
+            "clarification_question": "您想查询订单还是申请退款？",
+        })
+    )
+    mock_llm_class.return_value = mock_llm
+
+    agent = EntryAgent(model_name="gpt-test", api_key="test-key")
+    state = {
+        "messages": [{"role": "user", "content": "我想查东西"}],
+        "intent": None,
+        "confidence": 0.0,
+        "target_agent": None,
+        "context": {},
+    }
+    result = agent.run(state)
+
+    assert result["target_agent"] == "clarify"
+    assert result["clarification_question"] == "您想查询订单还是申请退款？"

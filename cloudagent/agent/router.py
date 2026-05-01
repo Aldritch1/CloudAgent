@@ -11,7 +11,8 @@ Analyze the user's message and output ONLY a JSON object with this exact schema:
 {{
   "intent": "chat|faq|workflow",
   "confidence": 0.0-1.0,
-  "target_agent": "chat|faq|workflow"
+  "target_agent": "chat|faq|workflow|clarify",
+  "clarification_question": "optional question string"
 }}
 
 Intent definitions:
@@ -20,9 +21,9 @@ Intent definitions:
 - "workflow": business transactions like order queries, refunds, ticket creation
 
 Rules:
-- confidence > 0.8: user intent is clearly one of the above
+- confidence > 0.8: user intent is clearly one of the above, set target_agent = intent
+- 0.5 < confidence <= 0.8: intent is somewhat unclear, set target_agent = "clarify" and provide a brief clarification_question
 - confidence <= 0.5: unclear or unrelated, fallback to chat agent
-- Set target_agent to the most appropriate agent for the intent.
 
 User message: {message}
 
@@ -60,8 +61,11 @@ class EntryAgent:
             state["confidence"] = 0.0
             state["target_agent"] = "chat"
 
-        # Routing logic: phase2 has chat, faq, and workflow intents
-        if state["confidence"] <= 0.5:
+        # Routing logic: phase3 adds clarify for mid-confidence
+        if 0.5 < state["confidence"] <= 0.8:
+            state["target_agent"] = "clarify"
+            state["clarification_question"] = parsed.get("clarification_question", "能再详细说明一下吗？")
+        elif state["confidence"] <= 0.5:
             state["target_agent"] = "chat"
 
         return state

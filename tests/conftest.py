@@ -11,3 +11,4 @@ def set_test_env(monkeypatch):
     monkeypatch.setenv("NEO4J_USER", "neo4j")
     monkeypatch.setenv("NEO4J_PASSWORD", "password")
     monkeypatch.setenv("DATABASE_URL", "postgresql://cloudagent:cloudagent@localhost:5432/cloudagent")
+    monkeypatch.setenv("JWT_DISABLED", "true")

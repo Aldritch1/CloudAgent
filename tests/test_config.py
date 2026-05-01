@@ -16,7 +16,9 @@ def patch_env(monkeypatch):
 
 
 def test_settings_loads_from_env(patch_env):
-    # Import here AFTER env vars are patched
+    # Import here AFTER env vars are patched; reload to clear singleton cache
+    import cloudagent.config
+    importlib.reload(cloudagent.config)
     from cloudagent.config import settings
 
     assert settings.openai_api_key.get_secret_value() == "test-key"

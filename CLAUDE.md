@@ -2,7 +2,7 @@
 
 CloudAgent is an intelligent customer service system built with FastAPI + LangGraph + LangChain. It uses a multi-Agent architecture with hybrid RAG (Milvus + Neo4j + PostgreSQL) and a tiered memory system (Redis hot / PostgreSQL warm / Milvus cold).
 
-**Current Phase:** Phase 2 complete — Multi-Agent + Hybrid RAG (Entry Agent, RAG Agent, Chat Agent, Milvus + Neo4j + PostgreSQL retrieval with RRF fusion).
+**Current Phase:** Phase 3 complete — Memory + Security + Optimization (JWT auth, tiered memory, L1/L2 cache, clarification logic, HITL via LangGraph interrupt).
 
 ---
 
@@ -17,6 +17,7 @@ Four-layer architecture (from design doc):
 │  API Gateway: FastAPI + Nginx           │
 ├─────────────────────────────────────────┤
 │  Agent Engine: LangGraph + LangChain    │
+│  ├─ StateGraph (orchestration + HITL)   │
 │  ├─ Entry Agent (intent + routing)      │
 │  ├─ RAG Agent (Milvus + Neo4j + PG)     │
 │  ├─ Workflow Agent (PG transactions)    │
@@ -45,6 +46,8 @@ Four-layer architecture (from design doc):
 | Vector DB | Milvus | Semantic search with OpenAI embeddings (dim=1536, COSINE) |
 | Graph DB | Neo4j | Knowledge graph for FAQ relationship queries |
 | Structured DB | PostgreSQL | Business data + BM25 keyword search (`pg_trgm`, `tsvector`) |
+| Auth | python-jose | JWT Bearer token parsing, `jwt_disabled` dev switch |
+| Cache | Redis + Milvus | L1 exact match (Redis, TTL 300s) + L2 semantic (Milvus) |
 
 ---
 
@@ -52,17 +55,25 @@ Four-layer architecture (from design doc):
 
 ```
 cloudagent/
-├── main.py                  # FastAPI app, module-level dependency init
+├── main.py                  # FastAPI app, module-level dependency init, graph orchestration
 ├── config.py                # Settings(BaseSettings) singleton
 ├── models.py                # ChatRequest, ChatResponse
+├── state.py                 # AgentState TypedDict for LangGraph
+├── graph.py                 # StateGraph builder with nodes + interrupt
+├── auth.py                  # JWT dependency: get_current_user
+├── cache.py                 # QueryCache: L1/L2 query caching
+├── hitl.py                  # HITLManager: sensitive operation confirmation
 ├── agent/
 │   ├── __init__.py
-│   ├── router.py            # EntryAgent: intent recognition + routing
+│   ├── router.py            # EntryAgent: intent recognition + routing + clarify
 │   ├── chat_agent.py        # ChatAgent: system prompt + LLM invoke
 │   └── rag_agent.py         # RAGAgent: retrieval + context-augmented generation
 ├── memory/
 │   ├── __init__.py
-│   └── redis_store.py       # SessionStore: get_session / save_session
+│   ├── redis_store.py       # SessionStore: hot store (get_session / save_session)
+│   ├── warm_store.py        # WarmStore: PostgreSQL profiles + summaries
+│   ├── cold_store.py        # ColdStore: Milvus semantic memory embeddings
+│   └── manager.py           # TieredMemoryManager: aggregates hot/warm/cold
 └── retrieval/
     ├── __init__.py
     ├── base.py              # RetrievalResult dataclass, Retriever Protocol
@@ -73,10 +84,17 @@ cloudagent/
 
 tests/
 ├── conftest.py              # Autouse fixture: patches env vars before import
-├── test_main.py             # API endpoint tests (health, /chat, routing)
-├── test_router.py           # EntryAgent routing logic (chat/faq/workflow)
+├── test_main.py             # API endpoint tests (health, /chat, routing, auth)
+├── test_router.py           # EntryAgent routing logic (chat/faq/workflow/clarify)
 ├── test_chat_agent.py       # ChatAgent system prompt + message conversion
 ├── test_rag_agent.py        # RAGAgent prompt construction + LLM invoke
+├── test_auth.py             # JWT dependency tests
+├── test_graph.py            # LangGraph StateGraph flow + interrupt tests
+├── test_hitl.py             # HITL state machine tests
+├── test_cache.py            # L1/L2 cache tests
+├── test_memory_manager.py   # Tiered memory aggregation tests
+├── test_warm_store.py       # PostgreSQL warm store tests
+├── test_cold_store.py       # Milvus cold store tests
 ├── test_redis_store.py      # Redis storage + TTL + fallback
 ├── test_models.py           # Pydantic model validation
 ├── test_config.py           # Settings env loading
@@ -100,11 +118,11 @@ Dependencies are initialized at module import time in `main.py`:
 session_store = SessionStore(str(settings.redis_url))
 entry_agent = EntryAgent(model_name=settings.model_name, api_key=...)
 chat_agent = ChatAgent(model_name=settings.model_name, api_key=...)
-vector_retriever = VectorRetriever(uri=settings.milvus_uri, api_key=...)
-graph_retriever = GraphRetriever(uri=settings.neo4j_uri, ...)
-keyword_retriever = KeywordRetriever(dsn=settings.database_url)
-hybrid_retriever = HybridRetriever(vector_retriever, graph_retriever, keyword_retriever)
 rag_agent = RAGAgent(model_name=settings.model_name, api_key=..., retriever=hybrid_retriever)
+memory_manager = TieredMemoryManager(hot_store=None, warm_store=None, cold_store=None)
+cache = QueryCache(redis_client=session_store._redis)
+hitl = HITLManager()
+graph = build_graph(entry_agent, chat_agent, rag_agent, memory_manager, cache, hitl)
 ```
 
 This means **tests must patch the original modules before importing `main`**:
@@ -140,10 +158,19 @@ If a previous test imported `main` with different mocks, use `importlib.reload(c
 ### Intent Routing Logic
 
 ```
-confidence > 0.8   → route to target_agent
-0.5 < conf <= 0.8  → route directly (clarification in Phase 3)
+confidence > 0.8   → route to target_agent (chat / faq / workflow)
+0.5 < conf <= 0.8  → target_agent = "clarify", return clarification question
 confidence <= 0.5  → fallback to chat
 ```
+
+### LangGraph Interrupt (HITL)
+
+Sensitive workflow operations trigger a graph interrupt before execution:
+- `hitl_request_node` sets `action_required = "confirm"`
+- Graph compiles with `interrupt_before=["hitl_resume_node"]`
+- FastAPI `/chat` returns `ChatResponse(action_required="confirm")`
+- Client re-submits; server calls `graph.invoke(None, config)` to resume
+- Node failures in chat/rag propagate as exceptions caught by FastAPI (500)
 
 ---
 
@@ -169,7 +196,7 @@ Key testing patterns:
 |-------|------|------------------|
 | **1** ✅ | Core API skeleton | FastAPI, Entry Agent, Chat Agent, Redis sessions |
 | **2** ✅ | Multi-Agent + Hybrid RAG | RAG Agent, Milvus + Neo4j + PG retrieval, RRF fusion |
-| **3** | Memory + Security + Optimization | JWT auth, tiered memory (Redis/PG/Milvus), L1/L2 cache, HITL |
+| **3** ✅ | Memory + Security + Optimization | JWT auth, tiered memory (Redis/PG/Milvus), L1/L2 cache, HITL |
 | **4** | Production hardening | Rate limiting, circuit breaker, Prometheus/Grafana, multi-tenant |
 | **5** | MCP tool ecosystem | MCP servers for order/SMS/ticket services |
 | **6** | Frontend + SSE | Vue3 UI, SSE streaming, visualization |
@@ -191,6 +218,11 @@ NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
 DATABASE_URL=postgresql://cloudagent:cloudagent@localhost:5432/cloudagent
+
+# Phase 3: JWT Authentication
+JWT_SECRET=your-jwt-secret-key-at-least-32-characters-long
+JWT_ALGORITHM=HS256
+JWT_DISABLED=false  # set true in dev/tests to bypass auth
 ```
 
 ---
