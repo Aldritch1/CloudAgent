@@ -1,6 +1,3 @@
-import os
-os.environ["OPENAI_API_KEY"] = "test-key"
-
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -47,6 +44,9 @@ def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls):
     assert data["intent"] == "chat"
     assert data["confidence"] == 0.92
     mock_store.save_session.assert_called_once()
+    saved_messages = mock_store.save_session.call_args[0][1]
+    assert saved_messages[-2] == {"role": "user", "content": "hello"}
+    assert saved_messages[-1] == {"role": "assistant", "content": "Hi there!"}
 
 
 @patch("cloudagent.memory.redis_store.SessionStore")
@@ -99,4 +99,4 @@ def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls):
     })
 
     assert response.status_code == 500
-    assert "detail" in response.json()
+    assert response.json() == {"detail": "服务暂时繁忙，请稍后重试"}

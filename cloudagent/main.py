@@ -67,7 +67,4 @@ async def chat(request: ChatRequest):
         raise
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "服务暂时繁忙，请稍后重试"},
-        )
+        raise HTTPException(status_code=500, detail="服务暂时繁忙，请稍后重试")
