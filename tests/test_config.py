@@ -13,6 +13,11 @@ def patch_env(monkeypatch):
     monkeypatch.setenv("NEO4J_USER", "neo4j")
     monkeypatch.setenv("NEO4J_PASSWORD", "secret")
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@test:5432/db")
+    monkeypatch.setenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "120")
+    monkeypatch.setenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "3")
+    monkeypatch.setenv("CIRCUIT_BREAKER_RECOVERY_TIMEOUT", "30")
+    monkeypatch.setenv("ENABLE_METRICS", "false")
+    monkeypatch.setenv("DEFAULT_TENANT_ID", "acme")
 
 
 def test_settings_loads_from_env(patch_env):
@@ -29,6 +34,11 @@ def test_settings_loads_from_env(patch_env):
     assert settings.neo4j_user == "neo4j"
     assert settings.neo4j_password.get_secret_value() == "secret"
     assert settings.database_url == "postgresql://u:p@test:5432/db"
+    assert settings.rate_limit_requests_per_minute == 120
+    assert settings.circuit_breaker_failure_threshold == 3
+    assert settings.circuit_breaker_recovery_timeout == 30
+    assert settings.enable_metrics is False
+    assert settings.default_tenant_id == "acme"
 
 
 def test_settings_class_instantiation(patch_env):
@@ -43,3 +53,8 @@ def test_settings_class_instantiation(patch_env):
     assert s.neo4j_user == "neo4j"
     assert s.neo4j_password.get_secret_value() == "secret"
     assert s.database_url == "postgresql://u:p@test:5432/db"
+    assert s.rate_limit_requests_per_minute == 120
+    assert s.circuit_breaker_failure_threshold == 3
+    assert s.circuit_breaker_recovery_timeout == 30
+    assert s.enable_metrics is False
+    assert s.default_tenant_id == "acme"

@@ -12,3 +12,8 @@ def set_test_env(monkeypatch):
     monkeypatch.setenv("NEO4J_PASSWORD", "password")
     monkeypatch.setenv("DATABASE_URL", "postgresql://cloudagent:cloudagent@localhost:5432/cloudagent")
     monkeypatch.setenv("JWT_DISABLED", "true")
+    monkeypatch.setenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "60")
+    monkeypatch.setenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5")
+    monkeypatch.setenv("CIRCUIT_BREAKER_RECOVERY_TIMEOUT", "60")
+    monkeypatch.setenv("ENABLE_METRICS", "true")
+    monkeypatch.setenv("DEFAULT_TENANT_ID", "default")

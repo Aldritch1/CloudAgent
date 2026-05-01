@@ -17,6 +17,9 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
     "numpy>=1.26.0",
+    "limits[redis]>=3.12.0",
+    "pybreaker>=1.2.0",
+    "prometheus-client>=0.20.0",
 ]
 
 [project.optional-dependencies]

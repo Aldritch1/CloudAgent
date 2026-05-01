@@ -17,5 +17,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_disabled: bool = False
 
+    rate_limit_requests_per_minute: int = 60
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_recovery_timeout: int = 60
+    enable_metrics: bool = True
+    default_tenant_id: str = "default"
+
 
 settings = Settings()
