@@ -13,46 +13,21 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CloudAgent", version="0.1.0")
 
-# Dependencies initialized lazily to allow test-time patching
-_session_store = None
-_entry_agent = None
-_chat_agent = None
-
-
-def _get_session_store():
-    global _session_store
-    if _session_store is None:
-        _session_store = SessionStore(str(settings.redis_url))
-    return _session_store
-
-
-def _get_entry_agent():
-    global _entry_agent
-    if _entry_agent is None:
-        _entry_agent = EntryAgent(
-            model_name=settings.model_name,
-            api_key=settings.openai_api_key.get_secret_value(),
-        )
-    return _entry_agent
-
-
-def _get_chat_agent():
-    global _chat_agent
-    if _chat_agent is None:
-        _chat_agent = ChatAgent(
-            model_name=settings.model_name,
-            api_key=settings.openai_api_key.get_secret_value(),
-        )
-    return _chat_agent
+# Initialize dependencies
+session_store = SessionStore(str(settings.redis_url))
+entry_agent = EntryAgent(
+    model_name=settings.model_name,
+    api_key=settings.openai_api_key.get_secret_value(),
+)
+chat_agent = ChatAgent(
+    model_name=settings.model_name,
+    api_key=settings.openai_api_key.get_secret_value(),
+)
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     try:
-        session_store = _get_session_store()
-        entry_agent = _get_entry_agent()
-        chat_agent = _get_chat_agent()
-
         # Load session history
         messages = session_store.get_session(request.session_id)
 
@@ -88,12 +63,7 @@ async def chat(request: ChatRequest):
             intent=state["intent"],
             confidence=state["confidence"],
         )
-    except HTTPException as exc:
-        if exc.status_code == 500:
-            return JSONResponse(
-                status_code=500,
-                content={"error": "服务暂时繁忙，请稍后重试"},
-            )
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Unexpected error: {e}")

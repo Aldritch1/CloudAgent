@@ -1,19 +1,17 @@
+import os
+os.environ["OPENAI_API_KEY"] = "test-key"
+
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 
-# Patch settings before importing main
-@patch("cloudagent.main.settings")
-@patch("cloudagent.main.SessionStore")
-@patch("cloudagent.main.EntryAgent")
-@patch("cloudagent.main.ChatAgent")
-def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls, mock_settings):
-    mock_settings.openai_api_key = MagicMock(get_secret_value=MagicMock(return_value="test-key"))
-    mock_settings.model_name = "gpt-test"
-    mock_settings.redis_url = "redis://test"
-
+# Patch original modules before importing main (module-level init runs at import time)
+@patch("cloudagent.memory.redis_store.SessionStore")
+@patch("cloudagent.agent.router.EntryAgent")
+@patch("cloudagent.agent.chat_agent.ChatAgent")
+def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
     mock_store_cls.return_value = mock_store
@@ -51,15 +49,10 @@ def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls, mo
     mock_store.save_session.assert_called_once()
 
 
-@patch("cloudagent.main.settings")
-@patch("cloudagent.main.SessionStore")
-@patch("cloudagent.main.EntryAgent")
-@patch("cloudagent.main.ChatAgent")
-def test_chat_endpoint_invalid_request(mock_chat_cls, mock_entry_cls, mock_store_cls, mock_settings):
-    mock_settings.openai_api_key = MagicMock(get_secret_value=MagicMock(return_value="test-key"))
-    mock_settings.model_name = "gpt-test"
-    mock_settings.redis_url = "redis://test"
-
+@patch("cloudagent.memory.redis_store.SessionStore")
+@patch("cloudagent.agent.router.EntryAgent")
+@patch("cloudagent.agent.chat_agent.ChatAgent")
+def test_chat_endpoint_invalid_request(mock_chat_cls, mock_entry_cls, mock_store_cls):
     mock_store = MagicMock()
     mock_store_cls.return_value = mock_store
     mock_entry_cls.return_value = MagicMock()
@@ -72,15 +65,10 @@ def test_chat_endpoint_invalid_request(mock_chat_cls, mock_entry_cls, mock_store
     assert response.status_code == 422
 
 
-@patch("cloudagent.main.settings")
-@patch("cloudagent.main.SessionStore")
-@patch("cloudagent.main.EntryAgent")
-@patch("cloudagent.main.ChatAgent")
-def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls, mock_settings):
-    mock_settings.openai_api_key = MagicMock(get_secret_value=MagicMock(return_value="test-key"))
-    mock_settings.model_name = "gpt-test"
-    mock_settings.redis_url = "redis://test"
-
+@patch("cloudagent.memory.redis_store.SessionStore")
+@patch("cloudagent.agent.router.EntryAgent")
+@patch("cloudagent.agent.chat_agent.ChatAgent")
+def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
     mock_store_cls.return_value = mock_store
@@ -111,4 +99,4 @@ def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls, mock_
     })
 
     assert response.status_code == 500
-    assert "error" in response.json()
+    assert "detail" in response.json()
