@@ -25,6 +25,11 @@ chat_agent = ChatAgent(
 )
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "version": "0.1.0"}
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     try:

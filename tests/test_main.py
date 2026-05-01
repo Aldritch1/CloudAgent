@@ -8,6 +8,21 @@ from fastapi.testclient import TestClient
 @patch("cloudagent.memory.redis_store.SessionStore")
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
+def test_health_endpoint(mock_chat_cls, mock_entry_cls, mock_store_cls):
+    mock_store_cls.return_value = MagicMock()
+    mock_entry_cls.return_value = MagicMock()
+    mock_chat_cls.return_value = MagicMock()
+
+    from cloudagent.main import app
+    client = TestClient(app)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+@patch("cloudagent.memory.redis_store.SessionStore")
+@patch("cloudagent.agent.router.EntryAgent")
+@patch("cloudagent.agent.chat_agent.ChatAgent")
 def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
@@ -30,6 +45,9 @@ def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls):
     mock_chat.run.return_value = "Hi there!"
     mock_chat_cls.return_value = mock_chat
 
+    import importlib
+    import cloudagent.main
+    importlib.reload(cloudagent.main)
     from cloudagent.main import app
 
     client = TestClient(app)
