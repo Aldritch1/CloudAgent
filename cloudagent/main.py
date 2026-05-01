@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
 
 from cloudagent.auth import get_current_user
@@ -24,6 +24,10 @@ from cloudagent.agent.rag_agent import RAGAgent
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CloudAgent", version="0.1.0")
+
+if settings.enable_metrics:
+    from cloudagent.metrics import MetricsMiddleware
+    app.add_middleware(MetricsMiddleware)
 
 # Initialize dependencies
 session_store = SessionStore(str(settings.redis_url))
@@ -185,6 +189,9 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="服务暂时繁忙，请稍后重试")
 
 
+from prometheus_client import CONTENT_TYPE_LATEST
+
 @app.get("/metrics")
 async def metrics():
-    return {"status": "placeholder"}
+    from cloudagent.metrics import get_metrics
+    return Response(content=get_metrics(), media_type=CONTENT_TYPE_LATEST)

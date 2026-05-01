@@ -43,6 +43,7 @@ class RAGAgent:
         return lc_messages
 
     async def run(self, state: dict) -> str:
+        from cloudagent.metrics import record_llm_call
         last_user_msg = self._extract_last_user(state["messages"])
         contexts = await self._retriever.search(last_user_msg, top_k=5)
         context_text = "\n\n".join([c.content for c in contexts])
@@ -53,7 +54,9 @@ class RAGAgent:
 
         try:
             response = await self._llm.ainvoke(lc_messages)
+            record_llm_call("rag", "success")
             return response.content
         except Exception as e:
+            record_llm_call("rag", "failure")
             logger.error(f"RAG agent failed: {e}")
             raise

@@ -35,9 +35,12 @@ class ChatAgent:
         return converted
 
     def run(self, messages: list[dict]) -> str:
+        from cloudagent.metrics import record_llm_call
         converted = self._convert_messages(messages)
         try:
             response = self._llm.invoke(converted)
+            record_llm_call("chat", "success")
         except Exception as exc:
+            record_llm_call("chat", "failure")
             raise ChatAgentError(f"LLM invocation failed: {exc}") from exc
         return response.content

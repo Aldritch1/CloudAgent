@@ -23,12 +23,16 @@ class QueryCache:
         return f"cache:l1:{h}"
 
     async def get(self, query: str) -> dict | None:
+        from cloudagent.metrics import record_cache_hit
         # L1 exact match
         if self._redis is not None:
             try:
                 raw = self._redis.get(self._l1_key(query))
                 if raw:
+                    record_cache_hit("l1", True)
                     return json.loads(raw)
+                else:
+                    record_cache_hit("l1", False)
             except Exception as e:
                 logger.warning(f"L1 cache get failed: {e}")
 
