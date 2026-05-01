@@ -13,12 +13,17 @@ class ChatAgentError(Exception):
 
 
 class ChatAgent:
-    def __init__(self, model_name: str, api_key: str):
-        self._llm = ChatOpenAI(
+    def __init__(self, model_name: str, api_key: str, breaker=None):
+        llm = ChatOpenAI(
             model=model_name,
             api_key=api_key,
             temperature=0.7,
         )
+        if breaker is not None:
+            from cloudagent.circuit_breaker import CircuitBreakerChatOpenAI
+            self._llm = CircuitBreakerChatOpenAI(llm, breaker)
+        else:
+            self._llm = llm
 
     def _convert_messages(self, messages: list[dict]) -> list:
         converted = [SystemMessage(content=SYSTEM_PROMPT)]

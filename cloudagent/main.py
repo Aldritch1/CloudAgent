@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from cloudagent.auth import get_current_user
 from cloudagent.cache import QueryCache
+from cloudagent.circuit_breaker import LLMCircuitBreaker
 from cloudagent.config import settings
 from cloudagent.graph import build_graph
 from cloudagent.hitl import HITLManager
@@ -30,9 +31,16 @@ entry_agent = EntryAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
 )
+
+llm_breaker = LLMCircuitBreaker(
+    fail_max=settings.circuit_breaker_failure_threshold,
+    reset_timeout=settings.circuit_breaker_recovery_timeout,
+)
+
 chat_agent = ChatAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
+    breaker=llm_breaker,
 )
 vector_retriever = VectorRetriever(
     uri=settings.milvus_uri,
@@ -50,6 +58,7 @@ rag_agent = RAGAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
     retriever=hybrid_retriever,
+    breaker=llm_breaker,
 )
 
 memory_manager = TieredMemoryManager(
@@ -169,6 +178,9 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user)):
     except HTTPException:
         raise
     except Exception as e:
+        from pybreaker import CircuitBreakerError
+        if isinstance(e, CircuitBreakerError):
+            raise HTTPException(status_code=503, detail="服务暂时不可用，请稍后重试")
         logger.error(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="服务暂时繁忙，请稍后重试")
 

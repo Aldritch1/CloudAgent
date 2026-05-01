@@ -14,8 +14,13 @@ RAG_SYSTEM_PROMPT = """你是 CloudAgent 智能客服助手。请根据以下参
 
 
 class RAGAgent:
-    def __init__(self, model_name: str, api_key: str, retriever):
-        self._llm = ChatOpenAI(model=model_name, api_key=api_key, temperature=0.3)
+    def __init__(self, model_name: str, api_key: str, retriever, breaker=None):
+        llm = ChatOpenAI(model=model_name, api_key=api_key, temperature=0.3)
+        if breaker is not None:
+            from cloudagent.circuit_breaker import CircuitBreakerChatOpenAI
+            self._llm = CircuitBreakerChatOpenAI(llm, breaker)
+        else:
+            self._llm = llm
         self._retriever = retriever
 
     @staticmethod
