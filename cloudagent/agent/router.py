@@ -9,18 +9,20 @@ logger = logging.getLogger(__name__)
 INTENT_PROMPT = """You are an intent classifier for a customer service system.
 Analyze the user's message and output ONLY a JSON object with this exact schema:
 {{
-  "intent": "chat",
+  "intent": "chat|faq|workflow",
   "confidence": 0.0-1.0,
-  "target_agent": "chat"
+  "target_agent": "chat|faq|workflow"
 }}
 
 Intent definitions:
 - "chat": casual conversation, greetings, small talk, general chitchat
+- "faq": knowledge questions about policies, refunds, shipping, pricing, product info
+- "workflow": business transactions like order queries, refunds, ticket creation
 
 Rules:
-- confidence > 0.8: user is clearly making small talk or greeting
+- confidence > 0.8: user intent is clearly one of the above
 - confidence <= 0.5: unclear or unrelated, fallback to chat agent
-- Always set target_agent to "chat" for phase1.
+- Set target_agent to the most appropriate agent for the intent.
 
 User message: {message}
 
@@ -58,7 +60,7 @@ class EntryAgent:
             state["confidence"] = 0.0
             state["target_agent"] = "chat"
 
-        # Routing logic: phase1 only has chat agent
+        # Routing logic: phase2 has chat, faq, and workflow intents
         if state["confidence"] <= 0.5:
             state["target_agent"] = "chat"
 
