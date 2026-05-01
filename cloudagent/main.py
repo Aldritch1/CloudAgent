@@ -11,6 +11,7 @@ from cloudagent.hitl import HITLManager
 from cloudagent.memory.manager import TieredMemoryManager
 from cloudagent.memory.redis_store import SessionStore
 from cloudagent.models import ChatRequest, ChatResponse
+from cloudagent.rate_limit import RateLimiter
 from cloudagent.agent.router import EntryAgent
 from cloudagent.agent.chat_agent import ChatAgent
 from cloudagent.retrieval.vector import VectorRetriever
@@ -61,6 +62,11 @@ cache = QueryCache(
     redis_client=session_store._redis if not session_store._use_fallback else None,
 )
 
+rate_limiter = RateLimiter(
+    redis_client=session_store._redis if not session_store._use_fallback else None,
+    requests_per_minute=settings.rate_limit_requests_per_minute,
+)
+
 hitl_manager = HITLManager()
 
 graph = build_graph(
@@ -81,6 +87,17 @@ async def health():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, user_id: str = Depends(get_current_user)):
     try:
+        # Rate limiting
+        if not rate_limiter.check(user_id):
+            raise HTTPException(
+                status_code=429,
+                detail="请求过于频繁，请稍后再试",
+                headers={
+                    "X-RateLimit-Limit": str(settings.rate_limit_requests_per_minute),
+                    "X-RateLimit-Remaining": "0",
+                },
+            )
+
         # Load existing messages from hot store
         messages = session_store.get_session(request.session_id)
         messages.append({"role": "user", "content": request.message})
@@ -154,3 +171,8 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="服务暂时繁忙，请稍后重试")
+
+
+@app.get("/metrics")
+async def metrics():
+    return {"status": "placeholder"}
