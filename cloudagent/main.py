@@ -8,6 +8,11 @@ from cloudagent.models import ChatRequest, ChatResponse
 from cloudagent.memory.redis_store import SessionStore
 from cloudagent.agent.router import EntryAgent
 from cloudagent.agent.chat_agent import ChatAgent
+from cloudagent.retrieval.vector import VectorRetriever
+from cloudagent.retrieval.graph import GraphRetriever
+from cloudagent.retrieval.keyword import KeywordRetriever
+from cloudagent.retrieval.hybrid import HybridRetriever
+from cloudagent.agent.rag_agent import RAGAgent
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +27,23 @@ entry_agent = EntryAgent(
 chat_agent = ChatAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
+)
+vector_retriever = VectorRetriever(
+    uri=settings.milvus_uri,
+    api_key=settings.openai_api_key.get_secret_value(),
+)
+graph_retriever = GraphRetriever(
+    uri=settings.neo4j_uri,
+    user=settings.neo4j_user,
+    password=settings.neo4j_password.get_secret_value(),
+)
+keyword_retriever = KeywordRetriever(dsn=settings.database_url)
+hybrid_retriever = HybridRetriever(vector_retriever, graph_retriever, keyword_retriever)
+
+rag_agent = RAGAgent(
+    model_name=settings.model_name,
+    api_key=settings.openai_api_key.get_secret_value(),
+    retriever=hybrid_retriever,
 )
 
 
@@ -49,11 +71,17 @@ async def chat(request: ChatRequest):
         }
         state = entry_agent.run(state)
 
-        # Phase1: only chat agent exists
+        # Phase2: route by target_agent
+        target = state["target_agent"]
         try:
-            response_text = chat_agent.run(state["messages"])
+            if target == "faq":
+                response_text = await rag_agent.run(state)
+            elif target == "workflow":
+                response_text = "业务办理功能正在开发中，请稍后再试。"
+            else:
+                response_text = chat_agent.run(state["messages"])
         except Exception as e:
-            logger.error(f"Chat agent failed: {e}")
+            logger.error(f"Agent failed: {e}")
             raise HTTPException(status_code=500, detail="服务暂时繁忙，请稍后重试")
 
         # Append assistant message
