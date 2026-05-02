@@ -18,6 +18,10 @@ def patch_env(monkeypatch):
     monkeypatch.setenv("CIRCUIT_BREAKER_RECOVERY_TIMEOUT", "30")
     monkeypatch.setenv("ENABLE_METRICS", "false")
     monkeypatch.setenv("DEFAULT_TENANT_ID", "acme")
+    monkeypatch.setenv("MCP_SERVERS", "order,sms,ticket")
+    monkeypatch.setenv("ORDER_SERVICE_URL", "")
+    monkeypatch.setenv("SMS_SERVICE_URL", "")
+    monkeypatch.setenv("TICKET_SERVICE_URL", "")
 
 
 def test_settings_loads_from_env(patch_env):
@@ -39,6 +43,8 @@ def test_settings_loads_from_env(patch_env):
     assert settings.circuit_breaker_recovery_timeout == 30
     assert settings.enable_metrics is False
     assert settings.default_tenant_id == "acme"
+    assert settings.mcp_servers == "order,sms,ticket"
+    assert settings.order_service_url == ""
 
 
 def test_settings_class_instantiation(patch_env):
@@ -58,3 +64,5 @@ def test_settings_class_instantiation(patch_env):
     assert s.circuit_breaker_recovery_timeout == 30
     assert s.enable_metrics is False
     assert s.default_tenant_id == "acme"
+    assert s.mcp_servers == "order,sms,ticket"
+    assert s.order_service_url == ""

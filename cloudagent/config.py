@@ -23,5 +23,10 @@ class Settings(BaseSettings):
     enable_metrics: bool = True
     default_tenant_id: str = "default"
 
+    mcp_servers: str = "order,sms,ticket"
+    order_service_url: str = ""
+    sms_service_url: str = ""
+    ticket_service_url: str = ""
+
 
 settings = Settings()

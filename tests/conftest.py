@@ -17,3 +17,7 @@ def set_test_env(monkeypatch):
     monkeypatch.setenv("CIRCUIT_BREAKER_RECOVERY_TIMEOUT", "60")
     monkeypatch.setenv("ENABLE_METRICS", "true")
     monkeypatch.setenv("DEFAULT_TENANT_ID", "default")
+    monkeypatch.setenv("MCP_SERVERS", "order,sms,ticket")
+    monkeypatch.setenv("ORDER_SERVICE_URL", "")
+    monkeypatch.setenv("SMS_SERVICE_URL", "")
+    monkeypatch.setenv("TICKET_SERVICE_URL", "")
