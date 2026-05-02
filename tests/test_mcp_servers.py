@@ -3,6 +3,8 @@ from unittest.mock import patch
 import pytest
 
 from cloudagent.mcp.servers.order import OrderMCPServer
+from cloudagent.mcp.servers.sms import SMSMCPServer
+from cloudagent.mcp.servers.ticket import TicketMCPServer
 
 
 @pytest.fixture
@@ -25,3 +27,20 @@ async def test_query_order_tool(order_server):
         result = await order_server.call_tool("query_order", {"order_id": "12345"})
         mock_query.assert_called_once_with(order_id="12345")
         assert "订单已发货" in result.root.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_sms_server_list_tools():
+    server = SMSMCPServer()
+    tools = await server.list_tools()
+    names = [t.name for t in tools.root.tools]
+    assert "send_sms" in names
+
+
+@pytest.mark.asyncio
+async def test_ticket_server_list_tools():
+    server = TicketMCPServer(dsn="postgresql://test")
+    tools = await server.list_tools()
+    names = [t.name for t in tools.root.tools]
+    assert "create_ticket" in names
+    assert "query_ticket" in names
