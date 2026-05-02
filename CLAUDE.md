@@ -2,7 +2,7 @@
 
 CloudAgent is an intelligent customer service system built with FastAPI + LangGraph + LangChain. It uses a multi-Agent architecture with hybrid RAG (Milvus + Neo4j + PostgreSQL) and a tiered memory system (Redis hot / PostgreSQL warm / Milvus cold).
 
-**Current Phase:** Phase 4 complete — Production Hardening (rate limiting, circuit breaker, Prometheus metrics, multi-tenancy).
+**Current Phase:** Phase 5 complete — MCP tool ecosystem (Order/SMS/Ticket MCP servers, tool-calling WorkflowAgent).
 
 ---
 
@@ -20,7 +20,7 @@ Four-layer architecture (from design doc):
 │  ├─ StateGraph (orchestration + HITL)   │
 │  ├─ Entry Agent (intent + routing)      │
 │  ├─ RAG Agent (Milvus + Neo4j + PG)     │
-│  ├─ Workflow Agent (PG transactions)    │
+│  ├─ Workflow Agent (MCP tool calling)   │
 │  └─ Chat Agent (LLM direct)             │
 ├─────────────────────────────────────────┤
 │  Data Layer                             │
@@ -52,6 +52,7 @@ Four-layer architecture (from design doc):
 | Circuit Breaker | pybreaker | LLM call layer (ChatAgent / RAGAgent), fail_max=5, reset_timeout=60s |
 | Metrics | prometheus-client | HTTP middleware + LLM/cache/retrieval counters, `/metrics` endpoint |
 | Multi-Tenancy | contextvars | Application-level isolation: Redis key prefix, PG/Milvus `tenant_id` filters |
+| MCP | mcp (Anthropic SDK) | Built-in Order/SMS/Ticket servers, stdio transport |
 
 ---
 
@@ -76,13 +77,23 @@ cloudagent/
 │   ├── __init__.py
 │   ├── router.py            # EntryAgent: intent recognition + routing + clarify
 │   ├── chat_agent.py        # ChatAgent: system prompt + LLM invoke
-│   └── rag_agent.py         # RAGAgent: retrieval + context-augmented generation
+│   ├── rag_agent.py         # RAGAgent: retrieval + context-augmented generation
+│   └── workflow_agent.py    # WorkflowAgent: tool-calling with MCP
 ├── memory/
 │   ├── __init__.py
 │   ├── redis_store.py       # SessionStore: hot store (tenant-prefixed keys)
 │   ├── warm_store.py        # WarmStore: PostgreSQL profiles + summaries (tenant-aware SQL)
 │   ├── cold_store.py        # ColdStore: Milvus semantic memory (tenant-aware filters)
 │   └── manager.py           # TieredMemoryManager: aggregates hot/warm/cold
+├── mcp/
+│   ├── __init__.py
+│   ├── client.py            # MCPClient: tool discovery and invocation
+│   └── servers/
+│       ├── __init__.py
+│       ├── base.py          # BaseMCPServer
+│       ├── order.py         # OrderMCPServer
+│       ├── sms.py           # SMSMCPServer
+│       └── ticket.py        # TicketMCPServer
 └── retrieval/
     ├── __init__.py
     ├── base.py              # RetrievalResult dataclass, Retriever Protocol
@@ -211,7 +222,7 @@ Key testing patterns:
 | **2** ✅ | Multi-Agent + Hybrid RAG | RAG Agent, Milvus + Neo4j + PG retrieval, RRF fusion |
 | **3** ✅ | Memory + Security + Optimization | JWT auth, tiered memory (Redis/PG/Milvus), L1/L2 cache, HITL |
 | **4** ✅ | Production hardening | Rate limiting, circuit breaker, Prometheus/Grafana, multi-tenant |
-| **5** | MCP tool ecosystem | MCP servers for order/SMS/ticket services |
+| **5** ✅ | MCP tool ecosystem | Order/SMS/Ticket MCP servers, tool-calling WorkflowAgent |
 | **6** | Frontend + SSE | Vue3 UI, SSE streaming, visualization |
 
 ---
@@ -243,6 +254,12 @@ CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
 CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
 ENABLE_METRICS=true
 DEFAULT_TENANT_ID=default
+
+# Phase 5: MCP tool ecosystem
+MCP_SERVERS=order,sms,ticket
+ORDER_SERVICE_URL=
+SMS_SERVICE_URL=
+TICKET_SERVICE_URL=
 ```
 
 ---
@@ -252,6 +269,7 @@ DEFAULT_TENANT_ID=default
 - Always run `pytest tests/ -v` before declaring a task complete.
 - When adding new agents, follow the existing pattern: class with `__init__(model_name, api_key)` and `run(state/messages) -> result`.
 - When adding new retrievers, implement the `Retriever` Protocol: `async def search(self, query: str, top_k: int) -> list[RetrievalResult]`.
+- When adding new MCP servers, subclass `BaseMCPServer`, implement `list_tools()` and `call_tool(name, args)`, and register in `MCPClient`.
 - When modifying `main.py`, remember module-level initialization — update tests to patch new dependencies before import.
 - Keep error messages in Chinese for user-facing responses; English is fine for logs.
 - Do not add comments explaining WHAT the code does — use clear identifiers instead. Only comment non-obvious WHYs.

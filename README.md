@@ -15,6 +15,7 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 - **限流熔断**：Redis 滑动窗口限流（60 RPM）+ LLM 层熔断器（5 次失败/60s 恢复），保障服务稳定性
 - **可观测性**：Prometheus HTTP 请求延迟、LLM 调用、缓存命中率等指标，原生 `/metrics` 端点
 - **多租户隔离**：基于 `contextvars` 的租户上下文，`X-Tenant-ID` 或 JWT `tenant_id` 声明，Redis/PG/Milvus 全链路隔离
+- **MCP 工具生态**：内置 Order / SMS / Ticket MCP 服务，Workflow Agent 通过 tool-calling 执行业务操作
 - **优雅降级**：任何检索服务、LLM 或认证故障时，系统自动降级，保证服务可用性
 
 ---
@@ -31,7 +32,7 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 │  ├─ StateGraph    (编排 + HITL 中断)      │
 │  ├─ Entry Agent   (意图识别 + 路由 + 澄清) │
 │  ├─ RAG Agent     (混合检索 + 生成)       │
-│  ├─ Workflow Agent (业务办理, 开发中)     │
+│  ├─ Workflow Agent (MCP tool calling)   │
 │  └─ Chat Agent    (LLM 直接对话)          │
 ├─────────────────────────────────────────┤
 │  Data Layer                             │
@@ -39,6 +40,11 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 │  ├─ Neo4j       (知识图谱)                │
 │  ├─ PostgreSQL  (结构化数据 + 温记忆)      │
 │  └─ Redis       (会话热存储 + L1 缓存)     │
+├─────────────────────────────────────────┤
+│  MCP Servers (内置)                      │
+│  ├─ Order Server   订单查询/取消/退款      │
+│  ├─ SMS Server     短信发送               │
+│  └─ Ticket Server  工单创建/查询           │
 └─────────────────────────────────────────┘
 ```
 
@@ -61,6 +67,7 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 | 熔断 | pybreaker | LLM 调用层熔断，5 次失败开启，60s 半开恢复 |
 | 可观测性 | prometheus-client | HTTP 延迟直方图、LLM/缓存/检索计数器，`/metrics` 端点 |
 | 多租户 | contextvars | 应用层隔离：Redis key 前缀、PG/Milvus `tenant_id` 过滤 |
+| MCP | mcp (Anthropic SDK) | 内置 Order/SMS/Ticket 服务，stdio 传输 |
 | 配置管理 | pydantic-settings | `.env` 文件支持，`SecretStr` 保护密钥 |
 | 测试 | pytest | `pytest-asyncio` + `fakeredis` + `MagicMock` |
 
@@ -125,6 +132,12 @@ CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
 CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
 ENABLE_METRICS=true
 DEFAULT_TENANT_ID=default
+
+# Phase 5: MCP 工具生态
+MCP_SERVERS=order,sms,ticket
+ORDER_SERVICE_URL=
+SMS_SERVICE_URL=
+TICKET_SERVICE_URL=
 ```
 
 ### 5. 运行服务
@@ -201,6 +214,7 @@ pytest tests/ -v
 - 熔断：闭合/开启/半开状态、同步/异步调用
 - Prometheus 指标：HTTP 中间件、LLM 调用、缓存命中
 - 多租户：Header/JWT 声明提取、Redis/PG/Milvus 隔离
+- MCP 工具生态：MCPClient、Order/SMS/Ticket Server、WorkflowAgent tool-calling
 - 检索层：VectorRetriever、GraphRetriever、KeywordRetriever、HybridRetriever（RRF 融合）
 
 ---
@@ -225,7 +239,15 @@ cloudagent/
 ├── agent/
 │   ├── router.py            # EntryAgent: 意图识别 + 路由 + 澄清
 │   ├── chat_agent.py        # ChatAgent: 系统提示词 + LLM 调用
-│   └── rag_agent.py         # RAGAgent: 检索增强生成
+│   ├── rag_agent.py         # RAGAgent: 检索增强生成
+│   └── workflow_agent.py    # WorkflowAgent: MCP tool-calling 业务办理
+├── mcp/
+│   ├── client.py            # MCPClient: 工具发现与调用
+│   └── servers/
+│       ├── base.py          # BaseMCPServer
+│       ├── order.py         # OrderMCPServer
+│       ├── sms.py           # SMSMCPServer
+│       └── ticket.py        # TicketMCPServer
 ├── memory/
 │   ├── redis_store.py       # SessionStore: 热存储（租户前缀隔离）
 │   ├── warm_store.py        # WarmStore: PostgreSQL 用户画像（租户隔离）
@@ -254,6 +276,9 @@ tests/
 ├── test_redis_store.py      # Redis 存储测试
 ├── test_models.py           # Pydantic 模型校验
 ├── test_config.py           # 配置加载测试
+├── test_mcp_client.py       # MCPClient 工具发现与调用测试
+├── test_mcp_servers.py      # Order/SMS/Ticket MCP 服务测试
+├── test_workflow_agent.py   # WorkflowAgent tool-calling 测试
 └── retrieval/               # 检索层单元测试
 ```
 
@@ -267,7 +292,7 @@ tests/
 | **2** ✅ | 多智能体 + 混合 RAG | RAGAgent、Milvus + Neo4j + PG 检索、RRF 融合 |
 | **3** ✅ | 记忆 + 安全 + 优化 | JWT 认证、分层记忆（Redis/PG/Milvus）、L1/L2 缓存、HITL |
 | **4** ✅ | 生产加固 | 限流、熔断、Prometheus/Grafana、多租户 |
-| **5** | MCP 工具生态 | 订单 / 短信 / 工单等 MCP 服务 |
+| **5** ✅ | MCP 工具生态 | 订单 / 短信 / 工单等 MCP 服务 |
 | **6** | 前端 + SSE | Vue3 UI、SSE 流式输出、可视化 |
 
 ---
