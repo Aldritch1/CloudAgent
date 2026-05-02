@@ -16,6 +16,8 @@ from cloudagent.models import ChatRequest, ChatResponse
 from cloudagent.rate_limit import RateLimiter
 from cloudagent.agent.router import EntryAgent
 from cloudagent.agent.chat_agent import ChatAgent
+from cloudagent.agent.workflow_agent import WorkflowAgent
+from cloudagent.mcp.client import MCPClient
 from cloudagent.retrieval.vector import VectorRetriever
 from cloudagent.retrieval.graph import GraphRetriever
 from cloudagent.retrieval.keyword import KeywordRetriever
@@ -83,10 +85,19 @@ rate_limiter = RateLimiter(
 
 hitl_manager = HITLManager()
 
+mcp_client = MCPClient()
+
+workflow_agent = WorkflowAgent(
+    model_name=settings.model_name,
+    api_key=settings.openai_api_key.get_secret_value(),
+    mcp_client=mcp_client,
+)
+
 graph = build_graph(
     entry_agent=entry_agent,
     chat_agent=chat_agent,
     rag_agent=rag_agent,
+    workflow_agent=workflow_agent,
     memory_manager=memory_manager,
     cache=cache,
     hitl=hitl_manager,

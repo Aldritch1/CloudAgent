@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 
 # Patch original modules before importing main (module-level init runs at import time)
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.retrieval.vector.VectorRetriever")
 @patch("cloudagent.retrieval.graph.GraphRetriever")
 @patch("cloudagent.retrieval.keyword.KeywordRetriever")
@@ -13,7 +15,8 @@ from fastapi.testclient import TestClient
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
 def test_health_endpoint(mock_chat_cls, mock_entry_cls, mock_store_cls,
-                          mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls):
+                          mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
+                          mock_workflow_cls, mock_mcp_cls):
     mock_store_cls.return_value = MagicMock()
     mock_entry_cls.return_value = MagicMock()
     mock_chat_cls.return_value = MagicMock()
@@ -21,6 +24,8 @@ def test_health_endpoint(mock_chat_cls, mock_entry_cls, mock_store_cls,
     mock_kw_cls.return_value = MagicMock()
     mock_graph_cls.return_value = MagicMock()
     mock_vec_cls.return_value = MagicMock()
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
 
     from cloudagent.main import app
     client = TestClient(app)
@@ -29,6 +34,8 @@ def test_health_endpoint(mock_chat_cls, mock_entry_cls, mock_store_cls,
     assert response.json()["status"] == "ok"
 
 
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.retrieval.vector.VectorRetriever")
 @patch("cloudagent.retrieval.graph.GraphRetriever")
 @patch("cloudagent.retrieval.keyword.KeywordRetriever")
@@ -37,7 +44,8 @@ def test_health_endpoint(mock_chat_cls, mock_entry_cls, mock_store_cls,
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
 def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls,
-                                mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls):
+                                mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
+                                mock_workflow_cls, mock_mcp_cls):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
     mock_store_cls.return_value = mock_store
@@ -58,6 +66,9 @@ def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls,
     mock_chat = MagicMock()
     mock_chat.run.return_value = "Hi there!"
     mock_chat_cls.return_value = mock_chat
+
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
 
     import importlib
     import cloudagent.main
@@ -81,6 +92,8 @@ def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls,
     assert saved_messages[-1] == {"role": "assistant", "content": "Hi there!"}
 
 
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.retrieval.vector.VectorRetriever")
 @patch("cloudagent.retrieval.graph.GraphRetriever")
 @patch("cloudagent.retrieval.keyword.KeywordRetriever")
@@ -89,7 +102,8 @@ def test_chat_endpoint_success(mock_chat_cls, mock_entry_cls, mock_store_cls,
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
 def test_chat_endpoint_invalid_request(mock_chat_cls, mock_entry_cls, mock_store_cls,
-                                        mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls):
+                                        mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
+                                        mock_workflow_cls, mock_mcp_cls):
     mock_store = MagicMock()
     mock_store_cls.return_value = mock_store
     mock_entry_cls.return_value = MagicMock()
@@ -98,6 +112,8 @@ def test_chat_endpoint_invalid_request(mock_chat_cls, mock_entry_cls, mock_store
     mock_kw_cls.return_value = MagicMock()
     mock_graph_cls.return_value = MagicMock()
     mock_vec_cls.return_value = MagicMock()
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
 
     from cloudagent.main import app
 
@@ -106,6 +122,8 @@ def test_chat_endpoint_invalid_request(mock_chat_cls, mock_entry_cls, mock_store
     assert response.status_code == 422
 
 
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.retrieval.vector.VectorRetriever")
 @patch("cloudagent.retrieval.graph.GraphRetriever")
 @patch("cloudagent.retrieval.keyword.KeywordRetriever")
@@ -114,7 +132,8 @@ def test_chat_endpoint_invalid_request(mock_chat_cls, mock_entry_cls, mock_store
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
 def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls,
-                             mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls):
+                             mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
+                             mock_workflow_cls, mock_mcp_cls):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
     mock_store_cls.return_value = mock_store
@@ -136,6 +155,8 @@ def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls,
     mock_kw_cls.return_value = MagicMock()
     mock_graph_cls.return_value = MagicMock()
     mock_vec_cls.return_value = MagicMock()
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
 
     import importlib
     import cloudagent.main
@@ -152,6 +173,8 @@ def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls,
     assert response.json() == {"detail": "服务暂时繁忙，请稍后重试"}
 
 
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.retrieval.vector.VectorRetriever")
 @patch("cloudagent.retrieval.graph.GraphRetriever")
 @patch("cloudagent.retrieval.keyword.KeywordRetriever")
@@ -160,7 +183,8 @@ def test_chat_agent_failure(mock_chat_cls, mock_entry_cls, mock_store_cls,
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
 def test_chat_endpoint_faq_routing(mock_chat_cls, mock_entry_cls, mock_store_cls,
-                                    mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls):
+                                    mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
+                                    mock_workflow_cls, mock_mcp_cls):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
     mock_store_cls.return_value = mock_store
@@ -182,6 +206,9 @@ def test_chat_endpoint_faq_routing(mock_chat_cls, mock_entry_cls, mock_store_cls
     mock_chat = MagicMock()
     mock_chat_cls.return_value = mock_chat
 
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
+
     import importlib
     import cloudagent.main
     importlib.reload(cloudagent.main)
@@ -200,6 +227,8 @@ def test_chat_endpoint_faq_routing(mock_chat_cls, mock_entry_cls, mock_store_cls
     mock_rag.run.assert_called_once()
 
 
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.retrieval.vector.VectorRetriever")
 @patch("cloudagent.retrieval.graph.GraphRetriever")
 @patch("cloudagent.retrieval.keyword.KeywordRetriever")
@@ -207,8 +236,9 @@ def test_chat_endpoint_faq_routing(mock_chat_cls, mock_entry_cls, mock_store_cls
 @patch("cloudagent.memory.redis_store.SessionStore")
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
-def test_chat_endpoint_workflow_placeholder(mock_chat_cls, mock_entry_cls, mock_store_cls,
-                                             mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls):
+def test_chat_endpoint_workflow_tool(mock_chat_cls, mock_entry_cls, mock_store_cls,
+                                      mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
+                                      mock_workflow_cls, mock_mcp_cls):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
     mock_store_cls.return_value = mock_store
@@ -223,10 +253,15 @@ def test_chat_endpoint_workflow_placeholder(mock_chat_cls, mock_entry_cls, mock_
     }
     mock_entry_cls.return_value = mock_entry
 
+    mock_workflow = MagicMock()
+    mock_workflow.run = AsyncMock(return_value="订单 12345 已发货")
+    mock_workflow_cls.return_value = mock_workflow
+
     mock_rag = MagicMock()
     mock_rag_cls.return_value = mock_rag
     mock_chat = MagicMock()
     mock_chat_cls.return_value = mock_chat
+    mock_mcp_cls.return_value = MagicMock()
 
     import importlib
     import cloudagent.main
@@ -241,12 +276,12 @@ def test_chat_endpoint_workflow_placeholder(mock_chat_cls, mock_entry_cls, mock_
 
     assert response.status_code == 200
     data = response.json()
-    assert data["response"] == "业务办理功能正在开发中，请稍后再试。"
+    assert data["response"] == "订单 12345 已发货"
     assert data["intent"] == "workflow"
-    mock_rag.run.assert_not_called()
-    mock_chat.run.assert_not_called()
 
 
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.rate_limit.RateLimiter")
 @patch("cloudagent.circuit_breaker.LLMCircuitBreaker")
 @patch("cloudagent.metrics.MetricsMiddleware")
@@ -261,6 +296,7 @@ def test_chat_endpoint_rate_limit_returns_429(
     mock_chat_cls, mock_entry_cls, mock_store_cls,
     mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
     mock_metrics_cls, mock_breaker_cls, mock_rate_cls,
+    mock_workflow_cls, mock_mcp_cls,
 ):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
@@ -276,8 +312,14 @@ def test_chat_endpoint_rate_limit_returns_429(
     mock_kw_cls.return_value = MagicMock()
     mock_graph_cls.return_value = MagicMock()
     mock_vec_cls.return_value = MagicMock()
-    mock_metrics_cls.return_value = MagicMock()
+    def mock_middleware(app, **kwargs):
+        async def asgi(scope, receive, send):
+            await app(scope, receive, send)
+        return asgi
+    mock_metrics_cls.side_effect = mock_middleware
     mock_breaker_cls.return_value = MagicMock()
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
 
     import importlib
     import cloudagent.main
@@ -295,6 +337,8 @@ def test_chat_endpoint_rate_limit_returns_429(
     assert response.headers["X-RateLimit-Remaining"] == "0"
 
 
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
 @patch("cloudagent.rate_limit.RateLimiter")
 @patch("cloudagent.circuit_breaker.LLMCircuitBreaker")
 @patch("cloudagent.metrics.MetricsMiddleware")
@@ -309,6 +353,7 @@ def test_chat_endpoint_circuit_breaker_returns_503(
     mock_chat_cls, mock_entry_cls, mock_store_cls,
     mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
     mock_metrics_cls, mock_breaker_cls, mock_rate_cls,
+    mock_workflow_cls, mock_mcp_cls,
 ):
     mock_store = MagicMock()
     mock_store.get_session.return_value = []
@@ -336,8 +381,14 @@ def test_chat_endpoint_circuit_breaker_returns_503(
     mock_kw_cls.return_value = MagicMock()
     mock_graph_cls.return_value = MagicMock()
     mock_vec_cls.return_value = MagicMock()
-    mock_metrics_cls.return_value = MagicMock()
+    def mock_middleware(app, **kwargs):
+        async def asgi(scope, receive, send):
+            await app(scope, receive, send)
+        return asgi
+    mock_metrics_cls.side_effect = mock_middleware
     mock_breaker_cls.return_value = MagicMock()
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
 
     import importlib
     import cloudagent.main
