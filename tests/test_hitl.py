@@ -29,3 +29,10 @@ def test_is_reject():
     assert hitl.is_reject("取消") is True
     assert hitl.is_reject("reject") is True
     assert hitl.is_reject("确认") is False
+
+
+def test_is_sensitive_tool():
+    hitl = HITLManager()
+    assert hitl.is_sensitive_tool("request_refund") is True
+    assert hitl.is_sensitive_tool("cancel_order") is True
+    assert hitl.is_sensitive_tool("query_order") is False

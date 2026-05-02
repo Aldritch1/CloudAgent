@@ -155,3 +155,34 @@ def test_graph_compiles():
     rag = MagicMock()
     graph = build_graph(entry, chat, rag)
     assert graph is not None
+
+
+@pytest.mark.asyncio
+async def test_graph_workflow_node_with_tool():
+    entry = MagicMock()
+    entry.run = MagicMock(return_value={
+        "messages": [{"role": "user", "content": "查订单 12345"}],
+        "intent": "workflow",
+        "confidence": 0.92,
+        "target_agent": "workflow",
+        "context": {},
+    })
+
+    workflow = MagicMock()
+    workflow.run = AsyncMock(return_value="订单 12345 已发货")
+
+    chat = MagicMock()
+    rag = MagicMock()
+
+    graph = build_graph(entry, chat, rag, workflow_agent=workflow)
+
+    state = AgentState(
+        messages=[{"role": "user", "content": "查订单 12345"}],
+        user_id="user-1",
+        session_id="sess-1",
+        last_message="查订单 12345",
+    )
+
+    result = await graph.ainvoke(state, config={"configurable": {"thread_id": "sess-1"}})
+    assert result["response"] == "订单 12345 已发货"
+    workflow.run.assert_called_once()

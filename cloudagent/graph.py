@@ -24,6 +24,7 @@ class GraphNodes:
         memory_manager: TieredMemoryManager | None = None,
         cache: QueryCache | None = None,
         hitl: HITLManager | None = None,
+        workflow_agent=None,
     ):
         self.entry_agent = entry_agent
         self.chat_agent = chat_agent
@@ -31,6 +32,7 @@ class GraphNodes:
         self.memory_manager = memory_manager
         self.cache = cache
         self.hitl = hitl or HITLManager()
+        self.workflow_agent = workflow_agent
 
     async def load_memory_node(self, state: AgentState) -> AgentState:
         session_id = state.get("session_id", "")
@@ -64,7 +66,7 @@ class GraphNodes:
         if target == "workflow" and self.hitl.is_sensitive("workflow", {}):
             return "hitl_request"
         if target == "workflow":
-            return "workflow_placeholder"
+            return "workflow"
         if target in ("chat", "faq") and confidence > 0.5:
             return target
         return "chat"
@@ -80,8 +82,16 @@ class GraphNodes:
         state["response"] = response
         return state
 
-    def workflow_placeholder_node(self, state: AgentState) -> AgentState:
-        state["response"] = "业务办理功能正在开发中，请稍后再试。"
+    async def workflow_node(self, state: AgentState) -> AgentState:
+        if self.workflow_agent is not None:
+            try:
+                response = await self.workflow_agent.run(state)
+            except Exception as e:
+                logger.warning(f"Workflow agent failed: {e}")
+                response = "业务办理暂时无法完成，请稍后重试。"
+        else:
+            response = "业务办理功能正在开发中，请稍后再试。"
+        state["response"] = response
         return state
 
     def clarify_node(self, state: AgentState) -> AgentState:
@@ -132,8 +142,9 @@ def build_graph(
     memory_manager: TieredMemoryManager | None = None,
     cache: QueryCache | None = None,
     hitl: HITLManager | None = None,
+    workflow_agent=None,
 ):
-    nodes = GraphNodes(entry_agent, chat_agent, rag_agent, memory_manager, cache, hitl)
+    nodes = GraphNodes(entry_agent, chat_agent, rag_agent, memory_manager, cache, hitl, workflow_agent)
 
     builder = StateGraph(AgentState)
 
@@ -141,7 +152,7 @@ def build_graph(
     builder.add_node("entry", nodes.entry_node)
     builder.add_node("chat", nodes.chat_node)
     builder.add_node("rag", nodes.rag_node)
-    builder.add_node("workflow_placeholder", nodes.workflow_placeholder_node)
+    builder.add_node("workflow", nodes.workflow_node)
     builder.add_node("clarify", nodes.clarify_node)
     builder.add_node("hitl_request", nodes.hitl_request_node)
     builder.add_node("hitl_resume", nodes.hitl_resume_node)
@@ -155,14 +166,14 @@ def build_graph(
         {
             "chat": "chat",
             "faq": "rag",
-            "workflow_placeholder": "workflow_placeholder",
+            "workflow": "workflow",
             "hitl_request": "hitl_request",
             "clarify": "clarify",
         },
     )
     builder.add_edge("chat", "save_memory")
     builder.add_edge("rag", "save_memory")
-    builder.add_edge("workflow_placeholder", "save_memory")
+    builder.add_edge("workflow", "save_memory")
     builder.add_edge("clarify", "save_memory")
     builder.add_edge("hitl_request", "hitl_resume")
     builder.add_edge("hitl_resume", "save_memory")

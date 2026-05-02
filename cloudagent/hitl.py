@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 class HITLManager:
     """Human-in-the-Loop manager for sensitive operations."""
 
-    SENSITIVE_ACTIONS = {"refund", "cancel", "delete"}
+    SENSITIVE_ACTIONS = {"refund", "cancel", "delete", "request_refund", "cancel_order"}
     CONFIRM_KEYWORDS = {"确认", "是的", "confirm", "yes", "ok"}
     REJECT_KEYWORDS = {"取消", "拒绝", "reject", "no", "cancel"}
 
@@ -22,3 +22,6 @@ class HITLManager:
 
     def is_reject(self, message: str) -> bool:
         return any(kw in message.lower() for kw in self.REJECT_KEYWORDS)
+
+    def is_sensitive_tool(self, tool_name: str) -> bool:
+        return tool_name in self.SENSITIVE_ACTIONS
