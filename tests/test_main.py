@@ -408,3 +408,54 @@ def test_chat_endpoint_circuit_breaker_returns_503(
 
     assert response.status_code == 503
     assert response.json()["detail"] == "服务暂时不可用，请稍后重试"
+
+
+@patch("cloudagent.mcp.client.MCPClient")
+@patch("cloudagent.agent.workflow_agent.WorkflowAgent")
+@patch("cloudagent.rate_limit.RateLimiter")
+@patch("cloudagent.circuit_breaker.LLMCircuitBreaker")
+@patch("cloudagent.metrics.MetricsMiddleware")
+@patch("cloudagent.retrieval.vector.VectorRetriever")
+@patch("cloudagent.retrieval.graph.GraphRetriever")
+@patch("cloudagent.retrieval.keyword.KeywordRetriever")
+@patch("cloudagent.agent.rag_agent.RAGAgent")
+@patch("cloudagent.memory.redis_store.SessionStore")
+@patch("cloudagent.agent.router.EntryAgent")
+@patch("cloudagent.agent.chat_agent.ChatAgent")
+def test_cors_preflight_request(
+    mock_chat_cls, mock_entry_cls, mock_store_cls,
+    mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
+    mock_metrics_cls, mock_breaker_cls, mock_rate_cls,
+    mock_workflow_cls, mock_mcp_cls,
+):
+    mock_store = MagicMock()
+    mock_store_cls.return_value = mock_store
+    mock_entry_cls.return_value = MagicMock()
+    mock_chat_cls.return_value = MagicMock()
+    mock_rag_cls.return_value = MagicMock()
+    mock_kw_cls.return_value = MagicMock()
+    mock_graph_cls.return_value = MagicMock()
+    mock_vec_cls.return_value = MagicMock()
+    def mock_middleware(app, **kwargs):
+        async def asgi(scope, receive, send):
+            await app(scope, receive, send)
+        return asgi
+    mock_metrics_cls.side_effect = mock_middleware
+    mock_breaker_cls.return_value = MagicMock()
+    mock_rate_cls.return_value = MagicMock()
+    mock_workflow_cls.return_value = MagicMock()
+    mock_mcp_cls.return_value = MagicMock()
+
+    import importlib
+    import cloudagent.main
+    importlib.reload(cloudagent.main)
+    from cloudagent.main import app
+
+    client = TestClient(app)
+    response = client.options("/chat", headers={
+        "Origin": "http://localhost:5173",
+        "Access-Control-Request-Method": "POST",
+    })
+
+    assert response.status_code == 200
+    assert "access-control-allow-origin" in response.headers

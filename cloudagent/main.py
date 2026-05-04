@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from cloudagent.auth import get_current_user
@@ -28,6 +29,14 @@ from cloudagent.api import sse
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CloudAgent", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins.split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 if settings.enable_metrics:
     from cloudagent.metrics import MetricsMiddleware
