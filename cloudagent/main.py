@@ -23,6 +23,7 @@ from cloudagent.retrieval.graph import GraphRetriever
 from cloudagent.retrieval.keyword import KeywordRetriever
 from cloudagent.retrieval.hybrid import HybridRetriever
 from cloudagent.agent.rag_agent import RAGAgent
+from cloudagent.api import sse
 
 logger = logging.getLogger(__name__)
 
@@ -212,3 +213,5 @@ from prometheus_client import CONTENT_TYPE_LATEST
 async def metrics():
     from cloudagent.metrics import get_metrics
     return Response(content=get_metrics(), media_type=CONTENT_TYPE_LATEST)
+
+app.include_router(sse.router)
