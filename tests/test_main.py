@@ -422,7 +422,7 @@ def test_chat_endpoint_circuit_breaker_returns_503(
 @patch("cloudagent.memory.redis_store.SessionStore")
 @patch("cloudagent.agent.router.EntryAgent")
 @patch("cloudagent.agent.chat_agent.ChatAgent")
-def test_cors_preflight_request(
+def test_cors_headers_present(
     mock_chat_cls, mock_entry_cls, mock_store_cls,
     mock_rag_cls, mock_kw_cls, mock_graph_cls, mock_vec_cls,
     mock_metrics_cls, mock_breaker_cls, mock_rate_cls,
@@ -447,15 +447,14 @@ def test_cors_preflight_request(
     mock_mcp_cls.return_value = MagicMock()
 
     import importlib
+    import cloudagent.config
+    importlib.reload(cloudagent.config)
     import cloudagent.main
     importlib.reload(cloudagent.main)
     from cloudagent.main import app
 
     client = TestClient(app)
-    response = client.options("/chat", headers={
-        "Origin": "http://localhost:5173",
-        "Access-Control-Request-Method": "POST",
-    })
+    response = client.get("/health", headers={"Origin": "http://localhost:5173"})
 
     assert response.status_code == 200
-    assert "access-control-allow-origin" in response.headers
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"

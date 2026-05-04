@@ -16,6 +16,7 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 - **可观测性**：Prometheus HTTP 请求延迟、LLM 调用、缓存命中率等指标，原生 `/metrics` 端点
 - **多租户隔离**：基于 `contextvars` 的租户上下文，`X-Tenant-ID` 或 JWT `tenant_id` 声明，Redis/PG/Milvus 全链路隔离
 - **MCP 工具生态**：内置 Order / SMS / Ticket MCP 服务，Workflow Agent 通过 tool-calling 执行业务操作
+- **前端 + SSE 流式输出**：Vue3 聊天界面，实时 token-by-token 流式展示 LLM 输出，工具调用可视化卡片
 - **优雅降级**：任何检索服务、LLM 或认证故障时，系统自动降级，保证服务可用性
 
 ---
@@ -68,6 +69,7 @@ CloudAgent 是一个基于 FastAPI + LangGraph + LangChain 构建的智能客服
 | 可观测性 | prometheus-client | HTTP 延迟直方图、LLM/缓存/检索计数器，`/metrics` 端点 |
 | 多租户 | contextvars | 应用层隔离：Redis key 前缀、PG/Milvus `tenant_id` 过滤 |
 | MCP | mcp (Anthropic SDK) | 内置 Order/SMS/Ticket 服务，stdio 传输 |
+| 前端 | Vue3 + Vite + Element Plus | 聊天界面、SSE 流式输出、工具调用卡片 |
 | 配置管理 | pydantic-settings | `.env` 文件支持，`SecretStr` 保护密钥 |
 | 测试 | pytest | `pytest-asyncio` + `fakeredis` + `MagicMock` |
 
@@ -138,6 +140,10 @@ MCP_SERVERS=order,sms,ticket
 ORDER_SERVICE_URL=
 SMS_SERVICE_URL=
 TICKET_SERVICE_URL=
+
+# Phase 6: 前端 + SSE
+ENABLE_SSE=true
+CORS_ORIGINS=http://localhost:5173
 ```
 
 ### 5. 运行服务
@@ -183,6 +189,29 @@ curl -X POST http://localhost:8000/chat \
 }
 ```
 
+### SSE 流式对话接口
+
+```bash
+curl -X POST http://localhost:8000/chat/stream \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{
+    "session_id": "550e8400-e29b-41d4-a716-446655440000",
+    "message": "帮我查一下订单"
+  }'
+```
+
+SSE 事件类型：
+| Event | 说明 |
+|-------|------|
+| `intent` | 意图识别结果（intent, confidence, target_agent） |
+| `token` | LLM 生成的单个 token（流式输出） |
+| `tool_call` | Tool 调用信息（tool_name, arguments） |
+| `tool_result` | Tool 执行结果 |
+| `hitl` | HITL 中断，需要用户确认 |
+| `done` | 流结束，包含完整 response |
+| `error` | 错误信息 |
+
 ### 意图路由规则
 
 | 置信度 | 处理方式 |
@@ -215,6 +244,8 @@ pytest tests/ -v
 - Prometheus 指标：HTTP 中间件、LLM 调用、缓存命中
 - 多租户：Header/JWT 声明提取、Redis/PG/Milvus 隔离
 - MCP 工具生态：MCPClient、Order/SMS/Ticket Server、WorkflowAgent tool-calling
+- SSE 流式输出：`/chat/stream` 端点、EventSourceResponse、意图/token/tool_call/done 事件
+- 前端：Vue3 聊天界面、Pinia 状态管理、SSE 手动解析
 - 检索层：VectorRetriever、GraphRetriever、KeywordRetriever、HybridRetriever（RRF 融合）
 
 ---
@@ -236,6 +267,9 @@ cloudagent/
 ├── metrics.py               # Prometheus 指标与中间件
 ├── tenant_context.py        # 租户上下文 ContextVar
 ├── tenant.py                # TenantDependency 依赖注入
+├── api/
+│   ├── __init__.py
+│   └── sse.py               # SSE 流式输出端点
 ├── agent/
 │   ├── router.py            # EntryAgent: 意图识别 + 路由 + 澄清
 │   ├── chat_agent.py        # ChatAgent: 系统提示词 + LLM 调用
@@ -259,6 +293,21 @@ cloudagent/
     ├── graph.py             # GraphRetriever: Neo4j 图谱搜索
     ├── keyword.py           # KeywordRetriever: PostgreSQL 全文检索
     └── hybrid.py            # HybridRetriever: RRF 多路融合
+
+frontend/                    # Vue3 + Vite + Element Plus 前端
+├── index.html
+├── package.json
+├── vite.config.ts
+├── src/
+│   ├── main.ts
+│   ├── App.vue
+│   ├── router/
+│   ├── views/ChatView.vue
+│   ├── components/
+│   ├── api/chat.ts
+│   ├── stores/chat.ts
+│   └── types/chat.ts
+└── public/
 
 tests/
 ├── conftest.py              # 全局 autouse fixture（环境变量隔离）
@@ -293,7 +342,7 @@ tests/
 | **3** ✅ | 记忆 + 安全 + 优化 | JWT 认证、分层记忆（Redis/PG/Milvus）、L1/L2 缓存、HITL |
 | **4** ✅ | 生产加固 | 限流、熔断、Prometheus/Grafana、多租户 |
 | **5** ✅ | MCP 工具生态 | 订单 / 短信 / 工单等 MCP 服务 |
-| **6** | 前端 + SSE | Vue3 UI、SSE 流式输出、可视化 |
+| **6** ✅ | 前端 + SSE | Vue3 UI、SSE 流式输出、可视化 |
 
 ---
 

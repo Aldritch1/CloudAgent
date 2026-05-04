@@ -2,7 +2,7 @@
 
 CloudAgent is an intelligent customer service system built with FastAPI + LangGraph + LangChain. It uses a multi-Agent architecture with hybrid RAG (Milvus + Neo4j + PostgreSQL) and a tiered memory system (Redis hot / PostgreSQL warm / Milvus cold).
 
-**Current Phase:** Phase 5 complete — MCP tool ecosystem (Order/SMS/Ticket MCP servers, tool-calling WorkflowAgent).
+**Current Phase:** Phase 6 complete — Vue3 frontend + SSE streaming (real-time token output, tool-call visualization).
 
 ---
 
@@ -53,6 +53,8 @@ Four-layer architecture (from design doc):
 | Metrics | prometheus-client | HTTP middleware + LLM/cache/retrieval counters, `/metrics` endpoint |
 | Multi-Tenancy | contextvars | Application-level isolation: Redis key prefix, PG/Milvus `tenant_id` filters |
 | MCP | mcp (Anthropic SDK) | Built-in Order/SMS/Ticket servers, stdio transport |
+| Frontend | Vue3 + Vite + Element Plus | Chat UI, SSE streaming, tool-call cards |
+| Streaming | sse-starlette | `/chat/stream` endpoint, EventSourceResponse |
 
 ---
 
@@ -73,6 +75,9 @@ cloudagent/
 ├── metrics.py               # Prometheus counters, histograms, MetricsMiddleware
 ├── tenant_context.py        # ContextVar for tenant_id isolation
 ├── tenant.py                # TenantDependency: X-Tenant-ID header / JWT claim
+├── api/
+│   ├── __init__.py
+│   └── sse.py               # SSE streaming endpoint
 ├── agent/
 │   ├── __init__.py
 │   ├── router.py            # EntryAgent: intent recognition + routing + clarify
@@ -101,6 +106,21 @@ cloudagent/
     ├── graph.py             # GraphRetriever: Neo4j FAQ search
     ├── keyword.py           # KeywordRetriever: PostgreSQL BM25/tsvector
     └── hybrid.py            # HybridRetriever: RRF fusion of all three
+
+frontend/                    # Vue3 + Vite + Element Plus
+├── index.html
+├── package.json
+├── vite.config.ts
+├── src/
+│   ├── main.ts
+│   ├── App.vue
+│   ├── router/
+│   ├── views/ChatView.vue
+│   ├── components/
+│   ├── api/chat.ts
+│   ├── stores/chat.ts
+│   └── types/chat.ts
+└── public/
 
 tests/
 ├── conftest.py              # Autouse fixture: patches env vars before import
@@ -223,7 +243,7 @@ Key testing patterns:
 | **3** ✅ | Memory + Security + Optimization | JWT auth, tiered memory (Redis/PG/Milvus), L1/L2 cache, HITL |
 | **4** ✅ | Production hardening | Rate limiting, circuit breaker, Prometheus/Grafana, multi-tenant |
 | **5** ✅ | MCP tool ecosystem | Order/SMS/Ticket MCP servers, tool-calling WorkflowAgent |
-| **6** | Frontend + SSE | Vue3 UI, SSE streaming, visualization |
+| **6** ✅ | Frontend + SSE | Vue3 UI, SSE streaming, visualization |
 
 ---
 
@@ -260,6 +280,10 @@ MCP_SERVERS=order,sms,ticket
 ORDER_SERVICE_URL=
 SMS_SERVICE_URL=
 TICKET_SERVICE_URL=
+
+# Phase 6: Frontend + SSE
+ENABLE_SSE=true
+CORS_ORIGINS=http://localhost:5173
 ```
 
 ---
