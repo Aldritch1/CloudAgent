@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncIterator
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -60,3 +61,30 @@ class RAGAgent:
             record_llm_call("rag", "failure")
             logger.error(f"RAG agent failed: {e}")
             raise
+
+    async def run_stream(self, state: dict) -> AsyncIterator[str]:
+        query = state.get("last_message", "")
+        try:
+            context = await self._retriever.search(query, top_k=5)
+        except Exception:
+            logger.warning("Retrieval failed, continuing with empty context")
+            context = []
+
+        context_text = "\n".join([c.content for c in context])
+        prompt = f"""根据以下上下文回答问题：
+
+{context_text}
+
+问题：{query}
+"""
+        messages = [
+            SystemMessage(content="你是一个客服助手，请根据提供的上下文回答用户问题。"),
+            HumanMessage(content=prompt),
+        ]
+
+        try:
+            async for chunk in self._llm.astream(messages):
+                yield chunk.content
+        except Exception:
+            logger.exception("RAG stream failed")
+            yield "服务暂时繁忙，请稍后重试。"

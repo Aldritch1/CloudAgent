@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import AsyncIterator
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
@@ -71,3 +72,42 @@ class WorkflowAgent:
         except Exception as e:
             logger.error(f"Workflow agent failed: {e}")
             return "业务办理暂时无法完成，请稍后重试。"
+
+    async def run_stream(self, state: dict) -> AsyncIterator[dict]:
+        """Yield dict events: {event: 'token', data: str} or {event: 'tool_call', data: str} or {event: 'tool_result', data: str}"""
+        tools_desc = self._build_tool_descriptions()
+        system_prompt = WORKFLOW_SYSTEM_PROMPT.format(tools=tools_desc)
+
+        messages = [SystemMessage(content=system_prompt)]
+        for msg in state.get("messages", []):
+            if msg["role"] == "user":
+                messages.append(HumanMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                messages.append(AIMessage(content=msg["content"]))
+
+        try:
+            response = await self._llm.ainvoke(messages)
+            content = response.content.strip()
+
+            if content.startswith("{"):
+                import json
+                parsed = json.loads(content)
+                if "action" in parsed and self._mcp_client:
+                    yield {"event": "tool_call", "data": json.dumps({"tool": parsed["action"], "args": parsed.get("action_input", {})})}
+                    result = await self._mcp_client.call_tool(
+                        parsed["action"], parsed.get("action_input", {})
+                    )
+                    yield {"event": "tool_result", "data": result}
+                    messages.append(AIMessage(content=content))
+                    messages.append(ToolMessage(content=result, tool_call_id=parsed["action"]))
+                    async for chunk in self._llm.astream(messages):
+                        yield {"event": "token", "data": chunk.content}
+                elif "final_answer" in parsed:
+                    yield {"event": "token", "data": parsed["final_answer"]}
+                else:
+                    yield {"event": "token", "data": content}
+            else:
+                yield {"event": "token", "data": content}
+        except Exception as e:
+            logger.error(f"Workflow agent stream failed: {e}")
+            yield {"event": "token", "data": "业务办理暂时无法完成，请稍后重试。"}

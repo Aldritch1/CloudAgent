@@ -1,5 +1,10 @@
+import logging
+from collections.abc import AsyncIterator
+
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """You are a helpful customer service assistant.
@@ -44,3 +49,22 @@ class ChatAgent:
             record_llm_call("chat", "failure")
             raise ChatAgentError(f"LLM invocation failed: {exc}") from exc
         return response.content
+
+    async def run_stream(self, messages: list) -> AsyncIterator[str]:
+        from langchain_core.messages import SystemMessage, HumanMessage
+
+        system_prompt = "You are a helpful assistant."
+        msgs = [SystemMessage(content=system_prompt)]
+        for msg in messages:
+            if msg["role"] == "user":
+                msgs.append(HumanMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                from langchain_core.messages import AIMessage
+                msgs.append(AIMessage(content=msg["content"]))
+
+        try:
+            async for chunk in self._llm.astream(msgs):
+                yield chunk.content
+        except Exception:
+            logger.exception("Chat stream failed")
+            yield "服务暂时繁忙，请稍后重试。"
