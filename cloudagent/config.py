@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     order_service_url: str = ""
     sms_service_url: str = ""
     ticket_service_url: str = ""
+    enable_sse: bool = True
+    cors_origins: str = "*"
 
 
 settings = Settings()

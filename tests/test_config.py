@@ -22,6 +22,8 @@ def patch_env(monkeypatch):
     monkeypatch.setenv("ORDER_SERVICE_URL", "")
     monkeypatch.setenv("SMS_SERVICE_URL", "")
     monkeypatch.setenv("TICKET_SERVICE_URL", "")
+    monkeypatch.setenv("ENABLE_SSE", "false")
+    monkeypatch.setenv("CORS_ORIGINS", "https://example.com")
 
 
 def test_settings_loads_from_env(patch_env):
@@ -45,6 +47,8 @@ def test_settings_loads_from_env(patch_env):
     assert settings.default_tenant_id == "acme"
     assert settings.mcp_servers == "order,sms,ticket"
     assert settings.order_service_url == ""
+    assert settings.enable_sse is False
+    assert settings.cors_origins == "https://example.com"
 
 
 def test_settings_class_instantiation(patch_env):
@@ -66,3 +70,5 @@ def test_settings_class_instantiation(patch_env):
     assert s.default_tenant_id == "acme"
     assert s.mcp_servers == "order,sms,ticket"
     assert s.order_service_url == ""
+    assert s.enable_sse is False
+    assert s.cors_origins == "https://example.com"

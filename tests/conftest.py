@@ -21,3 +21,5 @@ def set_test_env(monkeypatch):
     monkeypatch.setenv("ORDER_SERVICE_URL", "")
     monkeypatch.setenv("SMS_SERVICE_URL", "")
     monkeypatch.setenv("TICKET_SERVICE_URL", "")
+    monkeypatch.setenv("ENABLE_SSE", "true")
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:5173")

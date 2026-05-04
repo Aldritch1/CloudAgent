@@ -21,6 +21,7 @@ dependencies = [
     "pybreaker>=1.2.0",
     "prometheus-client>=0.20.0",
     "mcp>=1.0.0",
+    "sse-starlette>=1.6.1",
 ]
 
 [project.optional-dependencies]
