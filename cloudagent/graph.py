@@ -1,4 +1,6 @@
+import json
 import logging
+from collections.abc import AsyncIterator
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.memory import InMemorySaver
@@ -133,6 +135,59 @@ class GraphNodes:
             except Exception as e:
                 logger.warning(f"Save memory failed: {e}")
         return state
+
+    async def stream_node(self, state: AgentState) -> AsyncIterator[dict]:
+        target = state.get("target_agent")
+
+        if target == "clarify":
+            yield {"event": "token", "data": state.get("clarification_question", "能再详细说明一下吗？")}
+            yield {"event": "done", "data": json.dumps({"response": state.get("clarification_question", "能再详细说明一下吗？"), "intent": "clarify"})}
+            return
+
+        if target == "workflow" and self.hitl.is_sensitive("workflow", {}):
+            yield {"event": "hitl", "data": json.dumps({"action_required": "confirm", "message": self.hitl.build_confirmation_message("workflow", {})})}
+            yield {"event": "done", "data": json.dumps({"response": "请确认是否执行此操作。", "intent": "workflow", "action_required": "confirm"})}
+            return
+
+        if target == "chat":
+            tokens = []
+            async for token in self.chat_agent.run_stream(state.get("messages", [])):
+                tokens.append(token)
+                yield {"event": "token", "data": token}
+            response = "".join(tokens)
+            state["response"] = response
+
+        elif target == "faq":
+            tokens = []
+            async for token in self.rag_agent.run_stream(state):
+                tokens.append(token)
+                yield {"event": "token", "data": token}
+            response = "".join(tokens)
+            state["response"] = response
+
+        elif target == "workflow":
+            if self.workflow_agent is not None:
+                try:
+                    async for event in self.workflow_agent.run_stream(state):
+                        yield event
+                    state["response"] = "Workflow completed"
+                except Exception as e:
+                    logger.warning(f"Workflow stream failed: {e}")
+                    yield {"event": "token", "data": "业务办理暂时无法完成，请稍后重试。"}
+                    state["response"] = "业务办理暂时无法完成，请稍后重试。"
+            else:
+                yield {"event": "token", "data": "业务办理功能正在开发中，请稍后再试。"}
+                state["response"] = "业务办理功能正在开发中，请稍后再试。"
+
+        else:
+            tokens = []
+            async for token in self.chat_agent.run_stream(state.get("messages", [])):
+                tokens.append(token)
+                yield {"event": "token", "data": token}
+            response = "".join(tokens)
+            state["response"] = response
+
+        yield {"event": "done", "data": json.dumps({"response": state.get("response", ""), "intent": state.get("intent", "chat")})}
 
 
 def build_graph(

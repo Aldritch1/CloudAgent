@@ -27,6 +27,23 @@ def test_sse_endpoint_returns_events(
     mock_get_user.return_value = "test-user"
     mock_tenant_dep.return_value = "default"
 
+    mock_entry = MagicMock()
+    mock_entry.run.return_value = {
+        "messages": [{"role": "user", "content": "hello"}],
+        "intent": "chat",
+        "confidence": 0.92,
+        "target_agent": "chat",
+        "context": {},
+    }
+    mock_entry_cls.return_value = mock_entry
+
+    mock_chat = MagicMock()
+    async def mock_stream(msgs):
+        for token in ["Hi", " ", "there", "!"]:
+            yield token
+    mock_chat.run_stream = mock_stream
+    mock_chat_cls.return_value = mock_chat
+
     import importlib
     import cloudagent.main
     importlib.reload(cloudagent.main)
@@ -41,4 +58,6 @@ def test_sse_endpoint_returns_events(
     assert response.status_code == 200
     assert "text/event-stream" in response.headers.get("content-type", "")
     body = response.text
+    assert "event: intent" in body
+    assert "event: token" in body
     assert "event: done" in body

@@ -186,3 +186,42 @@ async def test_graph_workflow_node_with_tool():
     result = await graph.ainvoke(state, config={"configurable": {"thread_id": "sess-1"}})
     assert result["response"] == "订单 12345 已发货"
     workflow.run.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_graph_stream_chat_flow():
+    entry = MagicMock()
+    entry.run = MagicMock(return_value={
+        "messages": [{"role": "user", "content": "hello"}],
+        "intent": "chat",
+        "confidence": 0.92,
+        "target_agent": "chat",
+        "context": {},
+        "clarification_question": "",
+    })
+
+    chat = MagicMock()
+    async def mock_stream(msgs):
+        for token in ["Hi", " ", "there", "!"]:
+            yield token
+    chat.run_stream = mock_stream
+
+    from cloudagent.graph import GraphNodes
+    nodes = GraphNodes(entry, chat, MagicMock())
+    state = AgentState(
+        messages=[{"role": "user", "content": "hello"}],
+        user_id="user-1",
+        session_id="sess-1",
+        last_message="hello",
+        target_agent="chat",
+        intent="chat",
+        confidence=0.92,
+        context={},
+    )
+
+    events = []
+    async for event in nodes.stream_node(state):
+        events.append(event)
+
+    assert any(e["event"] == "token" for e in events)
+    assert any(e["event"] == "done" for e in events)
