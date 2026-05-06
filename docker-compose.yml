@@ -31,6 +31,7 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
+    command: milvus run standalone
     depends_on:
       - etcd
       - minio
@@ -52,6 +53,15 @@ services:
       POSTGRES_PASSWORD: cloudagent
       POSTGRES_DB: cloudagent
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
 volumes:
   etcd-data:
   minio-data:
+  redis-data:

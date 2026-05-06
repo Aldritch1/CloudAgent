@@ -47,6 +47,7 @@ session_store = SessionStore(str(settings.redis_url))
 entry_agent = EntryAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
+    base_url=settings.openai_api_base,
 )
 
 llm_breaker = LLMCircuitBreaker(
@@ -57,6 +58,7 @@ llm_breaker = LLMCircuitBreaker(
 chat_agent = ChatAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
+    base_url=settings.openai_api_base,
     breaker=llm_breaker,
 )
 vector_retriever = VectorRetriever(
@@ -74,6 +76,7 @@ hybrid_retriever = HybridRetriever(vector_retriever, graph_retriever, keyword_re
 rag_agent = RAGAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
+    base_url=settings.openai_api_base,
     retriever=hybrid_retriever,
     breaker=llm_breaker,
 )
@@ -100,6 +103,7 @@ mcp_client = MCPClient()
 workflow_agent = WorkflowAgent(
     model_name=settings.model_name,
     api_key=settings.openai_api_key.get_secret_value(),
+    base_url=settings.openai_api_base,
     mcp_client=mcp_client,
 )
 

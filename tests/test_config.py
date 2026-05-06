@@ -6,6 +6,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def patch_env(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_API_BASE", "https://test.example.com/v1")
     monkeypatch.setenv("REDIS_URL", "redis://test:6379/0")
     monkeypatch.setenv("MODEL_NAME", "gpt-4")
     monkeypatch.setenv("MILVUS_URI", "http://test:19530")
@@ -33,6 +34,7 @@ def test_settings_loads_from_env(patch_env):
     from cloudagent.config import settings
 
     assert settings.openai_api_key.get_secret_value() == "test-key"
+    assert settings.openai_api_base == "https://test.example.com/v1"
     assert str(settings.redis_url) == "redis://test:6379/0"
     assert settings.model_name == "gpt-4"
     assert settings.milvus_uri == "http://test:19530"
@@ -56,6 +58,7 @@ def test_settings_class_instantiation(patch_env):
 
     s = Settings()
     assert s.openai_api_key.get_secret_value() == "test-key"
+    assert s.openai_api_base == "https://test.example.com/v1"
     assert str(s.redis_url) == "redis://test:6379/0"
     assert s.model_name == "gpt-4"
     assert s.milvus_uri == "http://test:19530"

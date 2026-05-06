@@ -22,8 +22,7 @@ export const useChatStore = defineStore('chat', () => {
     streaming.value = true
     currentIntent.value = null
 
-    const assistantMsg: Message = { id: generateId(), role: 'assistant', content: '' }
-    messages.value.push(assistantMsg)
+    messages.value.push({ id: generateId(), role: 'assistant', content: '' })
 
     try {
       await streamChat(content, sessionId.value, (event) => {
@@ -34,21 +33,26 @@ export const useChatStore = defineStore('chat', () => {
             // ignore
           }
         } else if (event.event === 'token') {
-          assistantMsg.content += event.data
+          const last = messages.value[messages.value.length - 1]
+          last.content += event.data
         } else if (event.event === 'tool_call') {
-          assistantMsg.content += '\n[调用工具] '
-          assistantMsg.content += event.data
+          const last = messages.value[messages.value.length - 1]
+          last.content += '\n[调用工具] '
+          last.content += event.data
         } else if (event.event === 'tool_result') {
-          assistantMsg.content += '\n[工具结果] '
-          assistantMsg.content += event.data
+          const last = messages.value[messages.value.length - 1]
+          last.content += '\n[工具结果] '
+          last.content += event.data
         } else if (event.event === 'hitl') {
-          assistantMsg.content += '\n[需要确认] 请回复"确认"或"取消"。'
+          const last = messages.value[messages.value.length - 1]
+          last.content += '\n[需要确认] 请回复"确认"或"取消"。'
         } else if (event.event === 'done') {
           streaming.value = false
         }
       })
     } catch (e) {
-      assistantMsg.content += '\n[错误] 连接失败，请重试。'
+      const last = messages.value[messages.value.length - 1]
+      last.content += '\n[错误] 连接失败，请重试。'
       streaming.value = false
     }
   }

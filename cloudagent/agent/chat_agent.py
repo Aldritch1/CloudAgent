@@ -18,10 +18,11 @@ class ChatAgentError(Exception):
 
 
 class ChatAgent:
-    def __init__(self, model_name: str, api_key: str, breaker=None):
+    def __init__(self, model_name: str, api_key: str, base_url: str = None, breaker=None):
         llm = ChatOpenAI(
             model=model_name,
             api_key=api_key,
+            base_url=base_url,
             temperature=0.7,
         )
         if breaker is not None:

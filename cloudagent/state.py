@@ -6,6 +6,7 @@ class AgentState(TypedDict, total=False):
     user_id: str
     session_id: str
     tenant_id: str | None
+    last_message: str
     intent: str | None
     confidence: float
     target_agent: str | None

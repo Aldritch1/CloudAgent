@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     openai_api_key: SecretStr
+    openai_api_base: str = "https://api.openai.com/v1"
     redis_url: RedisDsn = "redis://localhost:6379/0"
     model_name: str = "gpt-3.5-turbo"
     milvus_uri: str = "http://localhost:19530"

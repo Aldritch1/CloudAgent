@@ -28,3 +28,17 @@ class CircuitBreakerChatOpenAI:
     async def ainvoke(self, messages):
         wrapped = self._breaker.wrap_async(self._chat.ainvoke)
         return await wrapped(messages)
+
+    async def astream(self, messages):
+        from pybreaker import CircuitBreakerError
+
+        breaker = self._breaker._breaker
+        if breaker.current_state == "open":
+            raise CircuitBreakerError("Circuit open")
+
+        try:
+            async for chunk in self._chat.astream(messages):
+                yield chunk
+        except Exception:
+            breaker._inc_counter()
+            raise

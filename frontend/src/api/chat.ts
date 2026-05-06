@@ -31,11 +31,13 @@ export async function streamChat(
     let currentEvent = ''
     let currentData = ''
 
-    for (const line of lines) {
+    for (const rawLine of lines) {
+      const line = rawLine.trim()
       if (line.startsWith('event: ')) {
         currentEvent = line.slice(7)
       } else if (line.startsWith('data: ')) {
-        currentData = line.slice(6)
+        const dataLine = line.slice(6)
+        currentData = currentData ? currentData + '\n' + dataLine : dataLine
       } else if (line === '' && currentEvent) {
         onEvent({ event: currentEvent, data: currentData })
         currentEvent = ''
