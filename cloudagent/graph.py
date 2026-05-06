@@ -168,9 +168,12 @@ class GraphNodes:
         elif target == "workflow":
             if self.workflow_agent is not None:
                 try:
+                    tokens = []
                     async for event in self.workflow_agent.run_stream(state):
                         yield event
-                    state["response"] = "Workflow completed"
+                        if event.get("event") == "token":
+                            tokens.append(event.get("data", ""))
+                    state["response"] = "".join(tokens)
                 except Exception as e:
                     logger.warning(f"Workflow stream failed: {e}")
                     yield {"event": "token", "data": "业务办理暂时无法完成，请稍后重试。"}

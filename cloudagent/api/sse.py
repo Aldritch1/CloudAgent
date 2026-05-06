@@ -18,8 +18,12 @@ router = APIRouter()
 async def event_generator(request: ChatRequest, user_id: str, tenant_id: str) -> AsyncIterator[dict]:
     from cloudagent import main as main_module
 
+    # Load existing messages from session store for context
+    messages = main_module.session_store.get_session(request.session_id)
+    messages.append({"role": "user", "content": request.message})
+
     state = AgentState(
-        messages=[{"role": "user", "content": request.message}],
+        messages=messages,
         user_id=user_id,
         session_id=request.session_id,
         last_message=request.message,
@@ -47,10 +51,11 @@ async def event_generator(request: ChatRequest, user_id: str, tenant_id: str) ->
     async for event in nodes.stream_node(state):
         yield event
 
-    try:
-        await nodes.save_memory_node(state)
-    except Exception as e:
-        logger.warning(f"Save memory failed: {e}")
+    # Persist the assistant response back to session store
+    response_text = state.get("response", "")
+    if response_text:
+        messages.append({"role": "assistant", "content": response_text})
+        main_module.session_store.save_session(request.session_id, messages)
 
 
 @router.post("/chat/stream")
